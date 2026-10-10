@@ -44,7 +44,17 @@ jobs:
           java-version: 21
       - run: npm install
       - run: npm install -g firebase-tools
-      - run: npm run test:emulator
+      - name: Testes nos emuladores
+        shell: bash
+        run: |
+          set +e
+          npm run test:emulator 2>&1 | tee emulator.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            msg=$(grep -E "✖|rror|failed|not ok|Exception|ECONN|Cannot|expected|actual" emulator.log | head -80 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Falhas nos emuladores::${msg}"
+          fi
+          exit $status
 
   app:
     name: App · análise e testes
