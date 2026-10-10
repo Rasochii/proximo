@@ -1,0 +1,69 @@
+name: Claude · revisão de PR
+
+# Revisão automática com os mesmos critérios dos agentes do projeto (.claude/agents/*-reviewer.md).
+# Configuração (uma vez):
+#   1. No Claude Code, rode /install-github-app (instala o app do GitHub e cria o secret), OU
+#   2. rode `claude setup-token` e salve o token em Settings → Secrets → Actions como CLAUDE_CODE_OAUTH_TOKEN.
+#   (Para usar chave de API em vez da assinatura, troque a linha do token por:
+#    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }})
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - "app/lib/**"
+      - "app/test/**"
+      - "app/pubspec.yaml"
+      - "functions/src/**"
+      - "functions/test/**"
+      - "functions/test-emulator/**"
+      - "functions/package.json"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Revisão
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Você está revisando um PR do Próximo! (fila virtual para barbearias). O branch do PR já está no diretório atual.
+
+            1. Leia CLAUDE.md, app/CLAUDE.md e functions/CLAUDE.md. Eles definem as invariantes do projeto.
+            2. Veja o diff com `gh pr diff ${{ github.event.pull_request.number }}` e a descrição com `gh pr view ${{ github.event.pull_request.number }}`.
+            3. Aplique os critérios de:
+               - .claude/agents/backend-reviewer.md para mudanças em functions/ ou firestore.rules;
+               - .claude/agents/flutter-reviewer.md para mudanças em app/;
+               - .claude/agents/ux-a11y-reviewer.md quando o PR mexer em telas/widgets visíveis.
+            4. Revise apenas o que o PR muda. O CI já roda análise, lint e testes; não repita esses avisos,
+               foque em correção, concorrência, segurança/LGPD, violação de ADR, lifecycle e testes faltando.
+
+            Como responder (em pt-BR):
+            - Para cada problema concreto, um comentário inline com `mcp__github_inline_comment__create_inline_comment`
+              (use `confirmed: true`), começando por [Crítico], [Alto], [Médio] ou [Baixo], com o risco e a correção sugerida.
+            - Ao final, UM comentário geral com `gh pr comment` contendo: veredito (aprovar / ajustar antes do merge),
+              lista dos achados por gravidade e o que não foi possível verificar.
+            - Se não houver problemas relevantes, diga isso em uma frase no comentário geral. Não invente achados.
+            - Só publique comentários no GitHub; não envie a revisão como mensagem.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
