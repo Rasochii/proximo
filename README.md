@@ -1,5 +1,7 @@
 # Próximo! ✂️
 
+[![CI](https://github.com/Rasochii/proximo/actions/workflows/ci.yml/badge.svg)](https://github.com/Rasochii/proximo/actions/workflows/ci.yml)
+
 **Fila virtual para barbearias.** O cliente entra na fila pelo QR Code da porta, só com o nome, e espera onde quiser. O barbeiro aperta **"Próximo!"** e o celular de quem é chamado atualiza na hora.
 
 > Projeto de portfólio construído com arquitetura de produto real: Flutter + Riverpod 3 no app, Firebase no backend, regras de negócio puras e testadas, e segurança desde o primeiro commit.
