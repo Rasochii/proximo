@@ -92,12 +92,24 @@ final class FakeDocuments {
 }
 
 /// Monta o app inteiro com o backend falso (nenhum acesso ao Firebase).
-Future<void> pumpProximoApp(WidgetTester tester, {required DocumentWatcher watch}) async {
+///
+/// Sem [invoke], qualquer chamada a uma callable falha o teste: o repositório da fila depende do
+/// invocador mesmo nas telas que só leem, e o provider real exigiria o Firebase inicializado.
+Future<void> pumpProximoApp(
+  WidgetTester tester, {
+  required DocumentWatcher watch,
+  CallableInvoker? invoke,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       // Sem novas tentativas automáticas: erros devem aparecer de imediato e sem timers pendentes.
       retry: (retryCount, error) => null,
-      overrides: [documentWatcherProvider.overrideWithValue(watch)],
+      overrides: [
+        documentWatcherProvider.overrideWithValue(watch),
+        callableInvokerProvider.overrideWithValue(
+          invoke ?? (name, payload) => fail('Callable "$name" chamada sem um invocador falso.'),
+        ),
+      ],
       child: const ProximoApp(),
     ),
   );

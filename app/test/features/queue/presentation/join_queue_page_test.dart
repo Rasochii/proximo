@@ -28,6 +28,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('3 pessoas esperando'), findsOneWidget);
+    // A lista é preguiçosa: o 3º da fila fica abaixo da dobra na tela de teste (800×600).
+    await tester.scrollUntilVisible(find.text('3º'), 200);
     expect(find.text('3º'), findsOneWidget);
   });
 
