@@ -9,6 +9,7 @@ final class FirestoreShopRepository implements ShopRepository {
   final DocumentWatcher _watch;
 
   @override
-  Stream<Shop?> watchShop(String shopId) =>
-      _watch('shops/$shopId').map((json) => json == null ? null : ShopMapper.fromJson(shopId, json));
+  Stream<Shop?> watchShop(String shopId) => _watch(
+    'shops/$shopId',
+  ).map((json) => json == null ? null : ShopMapper.fromJson(shopId, json));
 }

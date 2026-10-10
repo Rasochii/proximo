@@ -25,9 +25,15 @@ abstract interface class CustomerQueueRepository {
 /// (o backend usa o uid autenticado como `barberId`).
 abstract interface class BarberQueueRepository {
   /// "Próximo!": finaliza o atual com [outcome] e chama o próximo compatível.
-  Future<Result<AdvanceResult>> callNext({required String shopId, FinishOutcome outcome = FinishOutcome.done});
+  Future<Result<AdvanceResult>> callNext({
+    required String shopId,
+    FinishOutcome outcome = FinishOutcome.done,
+  });
 
-  Future<Result<AdvanceResult>> finishCurrent({required String shopId, FinishOutcome outcome = FinishOutcome.done});
+  Future<Result<AdvanceResult>> finishCurrent({
+    required String shopId,
+    FinishOutcome outcome = FinishOutcome.done,
+  });
 
   Future<Result<void>> undoLast({required String shopId});
 

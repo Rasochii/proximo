@@ -27,7 +27,8 @@ final class OpeningInterval {
   final String end;
 
   @override
-  bool operator ==(Object other) => other is OpeningInterval && other.start == start && other.end == end;
+  bool operator ==(Object other) =>
+      other is OpeningInterval && other.start == start && other.end == end;
 
   @override
   int get hashCode => Object.hash(start, end);

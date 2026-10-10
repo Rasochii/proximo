@@ -9,10 +9,11 @@ enum AppEnv {
   emulator,
   prod;
 
-  static AppEnv get current => switch (const String.fromEnvironment('ENV', defaultValue: 'emulator')) {
-    'prod' => AppEnv.prod,
-    _ => AppEnv.emulator,
-  };
+  static AppEnv get current =>
+      switch (const String.fromEnvironment('ENV', defaultValue: 'emulator')) {
+        'prod' => AppEnv.prod,
+        _ => AppEnv.emulator,
+      };
 
   bool get usesEmulators => this == AppEnv.emulator;
 }

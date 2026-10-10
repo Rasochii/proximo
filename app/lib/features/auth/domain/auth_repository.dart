@@ -13,7 +13,10 @@ final class AppUser {
 
   @override
   bool operator ==(Object other) =>
-      other is AppUser && other.uid == uid && other.isAnonymous == isAnonymous && other.displayName == displayName;
+      other is AppUser &&
+      other.uid == uid &&
+      other.isAnonymous == isAnonymous &&
+      other.displayName == displayName;
 
   @override
   int get hashCode => Object.hash(uid, isAnonymous, displayName);

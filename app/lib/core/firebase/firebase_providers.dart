@@ -30,7 +30,11 @@ final callableInvokerProvider = Provider<CallableInvoker>((ref) {
       final result = await functions.httpsCallable(name).call<Object?>(payload);
       return normalizeJson(result.data);
     } on FirebaseFunctionsException catch (error) {
-      throw CallableException(error.code, message: error.message, details: normalizeJson(error.details));
+      throw CallableException(
+        error.code,
+        message: error.message,
+        details: normalizeJson(error.details),
+      );
     }
   };
 });

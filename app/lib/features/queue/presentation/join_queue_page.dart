@@ -38,12 +38,16 @@ class JoinQueuePage extends ConsumerWidget {
                     ..invalidate(publicQueueProvider(slug));
                 },
               ),
-              (AsyncData(value: null), _) => _MessageView(icon: Icons.storefront_outlined, message: l10n.shopNotFound),
+              (AsyncData(value: null), _) => _MessageView(
+                icon: Icons.storefront_outlined,
+                message: l10n.shopNotFound,
+              ),
               (AsyncData(value: final Shop _), AsyncData(value: null)) => _MessageView(
                 icon: Icons.schedule_rounded,
                 message: l10n.queueNotOpenedYet,
               ),
-              (AsyncData(value: final Shop _), AsyncData(value: final PublicQueue live)) => _LiveQueueView(queue: live),
+              (AsyncData(value: final Shop _), AsyncData(value: final PublicQueue live)) =>
+                _LiveQueueView(queue: live),
               _ => const Center(child: CircularProgressIndicator()),
             },
           ),
@@ -80,7 +84,10 @@ class _LiveQueueView extends StatelessWidget {
                     style: theme.textTheme.displayLarge?.copyWith(color: theme.colorScheme.primary),
                   ),
                 ),
-                Text(l10n.queueWaitingCount(queue.waitingCount), style: theme.textTheme.titleMedium),
+                Text(
+                  l10n.queueWaitingCount(queue.waitingCount),
+                  style: theme.textTheme.titleMedium,
+                ),
                 const Divider(height: Insets.xl),
                 Text(l10n.queueEntryEtaLabel, style: theme.textTheme.labelLarge),
                 const SizedBox(height: Insets.xs),
@@ -150,7 +157,11 @@ class _MessageView extends StatelessWidget {
           children: [
             Icon(icon, size: 56, color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: Insets.md),
-            Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ],
         ),
       ),
