@@ -52,7 +52,7 @@ async function call<T>(fn: string, token: string, data: object): Promise<CallRes
   }
   if (json.error) return { ok: false, error: json.error };
   if (!('result' in json)) return { ok: false, error: { status: `HTTP_${res.status}`, message: 'Resposta sem result' } };
-  return { ok: true, result: json.result as T };
+  return { ok: true, result: json.result };
 }
 
 /**
