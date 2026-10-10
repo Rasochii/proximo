@@ -20,3 +20,6 @@ linter:
     # App (não é pacote publicado): documentação pública não é obrigatória.
     public_member_api_docs: false
     lines_longer_than_80_chars: false
+    # Tipos de providers do Riverpod (ex.: StreamProvider.autoDispose.family) são longos e
+    # inferidos com precisão; anotar à mão só adiciona ruído.
+    specify_nonobvious_property_types: false
