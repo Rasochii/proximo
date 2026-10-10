@@ -99,6 +99,7 @@ Legenda de tamanho: **P** ≈ 1–3 dias · **M** ≈ 1 semana · **G** ≈ 2 se
 - Entrar só com nome + serviço; mostrar ETA **antes** de entrar.
 - Tela de posição em tempo real: posição em destaque, faixa de ETA, linha do tempo de status, "Sair da fila".
 - Estados: entrada fechada, fora do horário, fila vazia, "é sua vez!".
+- **Excluir meus dados** (LGPD + exigência das lojas): callable que anonimiza tickets e apaga a conta anônima.
 
 **Pronto quando:** dois navegadores (cliente e barbeiro) se atualizam em tempo real; acessibilidade validada (Semantics, contraste, fonte grande).
 
