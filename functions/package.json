@@ -8,9 +8,9 @@
     "node": "22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "build:watch": "tsc -p tsconfig.json --watch",
-    "typecheck": "tsc -p tsconfig.test.json",
+    "build": "tsc -p tsconfig.build.json",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "test": "node scripts/run-tests.mjs test",
     "test:coverage": "node scripts/run-tests.mjs test --experimental-test-coverage --test-coverage-include=src/domain/**",

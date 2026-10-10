@@ -4,7 +4,7 @@ export const NAME_MIN_LENGTH = 2;
 export const NAME_MAX_LENGTH = 30;
 
 /** Letras (qualquer idioma), acentos combinados, espaço, apóstrofo, ponto e hífen. Sem dígitos, URLs ou emojis. */
-const ALLOWED_NAME = /^\p{L}[\p{L}\p{M}' .\-]*$/u;
+const ALLOWED_NAME = /^\p{L}[\p{L}\p{M}' .-]*$/u;
 
 export interface SanitizedName {
   /** Nome completo saneado (visível só para a equipe). */

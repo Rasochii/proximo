@@ -48,7 +48,7 @@ function requireMember(member: Member | null): Member {
 // Cliente
 // ---------------------------------------------------------------------------
 
-export const joinQueue = callable('joinQueue', async (request, uid) => {
+export const joinQueue = callable('joinQueue', (request, uid) => {
   const input = parseJoinQueueInput(request.data);
   const newTicketId = refs.newId();
   return runQueueCommand({
@@ -72,7 +72,7 @@ export const joinQueue = callable('joinQueue', async (request, uid) => {
   });
 });
 
-export const leaveQueue = callable('leaveQueue', async (request, uid) => {
+export const leaveQueue = callable('leaveQueue', (request, uid) => {
   const input = parseTicketInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
@@ -88,7 +88,7 @@ export const leaveQueue = callable('leaveQueue', async (request, uid) => {
 // Equipe (barbeiro age sempre em nome próprio: barberId = uid autenticado)
 // ---------------------------------------------------------------------------
 
-export const callNext = callable('callNext', async (request, uid) => {
+export const callNext = callable('callNext', (request, uid) => {
   const input = parseAdvanceInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
@@ -100,7 +100,7 @@ export const callNext = callable('callNext', async (request, uid) => {
   });
 });
 
-export const finishCurrent = callable('finishCurrent', async (request, uid) => {
+export const finishCurrent = callable('finishCurrent', (request, uid) => {
   const input = parseAdvanceInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
@@ -112,7 +112,7 @@ export const finishCurrent = callable('finishCurrent', async (request, uid) => {
   });
 });
 
-export const undoLast = callable('undoLast', async (request, uid) => {
+export const undoLast = callable('undoLast', (request, uid) => {
   const input = parseShopActionInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
@@ -123,7 +123,7 @@ export const undoLast = callable('undoLast', async (request, uid) => {
   });
 });
 
-export const removeTicket = callable('removeTicket', async (request, uid) => {
+export const removeTicket = callable('removeTicket', (request, uid) => {
   const input = parseTicketInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
@@ -135,7 +135,7 @@ export const removeTicket = callable('removeTicket', async (request, uid) => {
   });
 });
 
-export const setBarberStatus = callable('setBarberStatus', async (request, uid) => {
+export const setBarberStatus = callable('setBarberStatus', (request, uid) => {
   const input = parseBarberStatusInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
@@ -153,7 +153,7 @@ export const setBarberStatus = callable('setBarberStatus', async (request, uid) 
   });
 });
 
-export const setAcceptingEntries = callable('setAcceptingEntries', async (request, uid) => {
+export const setAcceptingEntries = callable('setAcceptingEntries', (request, uid) => {
   const input = parseAcceptingEntriesInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
