@@ -73,7 +73,8 @@ final class JoinedTicket {
   final int number;
 
   @override
-  bool operator ==(Object other) => other is JoinedTicket && other.ticketId == ticketId && other.number == number;
+  bool operator ==(Object other) =>
+      other is JoinedTicket && other.ticketId == ticketId && other.number == number;
 
   @override
   int get hashCode => Object.hash(ticketId, number);
@@ -90,7 +91,10 @@ final class CalledTicket {
 
   @override
   bool operator ==(Object other) =>
-      other is CalledTicket && other.ticketId == ticketId && other.number == number && other.label == label;
+      other is CalledTicket &&
+      other.ticketId == ticketId &&
+      other.number == number &&
+      other.label == label;
 
   @override
   int get hashCode => Object.hash(ticketId, number, label);

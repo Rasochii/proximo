@@ -6,7 +6,8 @@ Plano completo em `docs/PLANO_DE_ACAO.md` · decisões em `docs/adr/` · regras 
 ## Estado atual
 
 - F0 e F1 prontas: domínio da fila, callables, rules e testes de concorrência.
-- F2 em andamento: o app só tem esqueleto (bootstrap, tema, router, l10n). Ainda não existem camada de dados, `Result`/`Failure` nem auth anônima. Quem criar esses itens deve atualizar esta seção.
+- F2 pronta e validada nos emuladores (a tela lê a fila do seed e atualiza ao vivo quando um cliente entra). O app tem `Result`/`Failure`, portas do backend (`core/firebase/backend_ports.dart`), repositórios de auth, barbearia e fila, e a tela `/b/:slug` com a fila pública ao vivo. Mapeadores são escritos à mão e os testes usam fakes: `riverpod_generator`, `freezed` e `mocktail` não estão no `pubspec.yaml`.
+- Herdado da F2 para as próximas fases: o App Check não é inicializado, `authStateProvider`/`activeTicketProvider` ainda não são usados por nenhuma tela e, no web, o link `/b/:slug` só abre com hash (`/#/b/:slug`), porque o app não usa a estratégia de URL por caminho.
 - Antes de assumir em que fase estamos, confira a tabela de Roadmap no `README.md`.
 
 ## Invariantes (só mudam com um ADR novo)

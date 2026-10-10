@@ -10,6 +10,8 @@ import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
+import { buildPublicQueue, createQueueDay, currentDateKey, parseShop } from '../src/domain';
+
 process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= '127.0.0.1:9099';
 
@@ -35,7 +37,7 @@ async function main(): Promise<void> {
     { start: '13:00', end: '19:00' },
   ];
 
-  await db.doc(`shops/${SHOP_ID}`).set({
+  const shopData = {
     name: 'Barbearia do Zé',
     slug: SHOP_ID,
     timezone: 'America/Sao_Paulo',
@@ -56,7 +58,8 @@ async function main(): Promise<void> {
     settings: { closeEntryMinutesBefore: 15, openEntryMinutesBefore: 30, maxTicketsPerDay: 200, undoWindowSec: 15 },
     ownerUid: DEMO_BARBERS[0].uid,
     createdAt: Date.now(),
-  });
+  };
+  await db.doc(`shops/${SHOP_ID}`).set(shopData);
 
   for (const barber of DEMO_BARBERS) {
     try {
@@ -70,6 +73,17 @@ async function main(): Promise<void> {
       active: true,
       joinedAt: Date.now(),
     });
+  }
+
+  // Projeção pública da fila vazia de hoje, para a rota /b/:slug já mostrar a fila antes do primeiro comando.
+  // Se o dia já existe, as callables mantêm a projeção e o seed não a sobrescreve.
+  const nowMs = Date.now();
+  const shop = parseShop(SHOP_ID, shopData);
+  const dateKey = currentDateKey(shop, nowMs);
+  const daySnap = await db.doc(`shops/${SHOP_ID}/days/${dateKey}`).get();
+  if (!daySnap.exists) {
+    const emptyDay = createQueueDay(SHOP_ID, dateKey, nowMs);
+    await db.doc(`publicQueues/${SHOP_ID}`).set(buildPublicQueue(emptyDay, { nowMs, shop, stats: {} }));
   }
 
   console.log(`✔ Barbearia "${SHOP_ID}" criada.`);

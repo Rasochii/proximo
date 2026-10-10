@@ -8,4 +8,6 @@ final authRepositoryProvider = Provider<AuthRepository>(
 );
 
 /// Usuário logado em tempo real (`null` = ninguém logado).
-final authStateProvider = StreamProvider<AppUser?>((ref) => ref.watch(authRepositoryProvider).authStateChanges());
+final authStateProvider = StreamProvider<AppUser?>(
+  (ref) => ref.watch(authRepositoryProvider).authStateChanges(),
+);

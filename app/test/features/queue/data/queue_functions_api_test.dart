@@ -20,7 +20,8 @@ final class FakeBackend {
   }
 }
 
-Object? Function() respond(Object? data) => () => data;
+Object? Function() respond(Object? data) =>
+    () => data;
 
 Object? Function() failWith(String code, {Object? details}) =>
     () => throw CallableException(code, details: details);
@@ -123,7 +124,11 @@ void main() {
     });
 
     test('desiste após o limite e devolve NetworkFailure', () async {
-      final backend = FakeBackend([failWith('unavailable'), failWith('unavailable'), failWith('unavailable')]);
+      final backend = FakeBackend([
+        failWith('unavailable'),
+        failWith('unavailable'),
+        failWith('unavailable'),
+      ]);
 
       final result = await apiWith(backend).undoLast(shopId: 's');
 

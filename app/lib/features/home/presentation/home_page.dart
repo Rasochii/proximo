@@ -35,7 +35,10 @@ class HomePage extends StatelessWidget {
                 Card(
                   clipBehavior: Clip.antiAlias,
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: Insets.lg, vertical: Insets.sm),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: Insets.lg,
+                      vertical: Insets.sm,
+                    ),
                     leading: const Icon(Icons.content_cut_rounded),
                     title: Text(l10n.homeBarberTitle),
                     subtitle: Text(l10n.homeBarberSubtitle),

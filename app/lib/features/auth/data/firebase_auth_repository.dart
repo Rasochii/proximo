@@ -23,7 +23,10 @@ final class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<Result<AppUser>> signInWithEmail({required String email, required String password}) =>
-      _guard(() async => (await _auth.signInWithEmailAndPassword(email: email.trim(), password: password)).user);
+      _guard(
+        () async =>
+            (await _auth.signInWithEmailAndPassword(email: email.trim(), password: password)).user,
+      );
 
   @override
   Future<void> signOut() => _auth.signOut();
@@ -35,12 +38,16 @@ final class FirebaseAuthRepository implements AuthRepository {
     } on FirebaseAuthException catch (error) {
       return Err(switch (error.code) {
         'network-request-failed' => const NetworkFailure(),
-        'invalid-credential' || 'wrong-password' || 'user-not-found' || 'invalid-email' => const PermissionFailure(),
+        'invalid-credential' ||
+        'wrong-password' ||
+        'user-not-found' ||
+        'invalid-email' => const PermissionFailure(),
         _ => UnexpectedFailure(error.code),
       });
     }
   }
 
-  static AppUser? _toAppUser(User? user) =>
-      user == null ? null : AppUser(uid: user.uid, isAnonymous: user.isAnonymous, displayName: user.displayName);
+  static AppUser? _toAppUser(User? user) => user == null
+      ? null
+      : AppUser(uid: user.uid, isAnonymous: user.isAnonymous, displayName: user.displayName);
 }

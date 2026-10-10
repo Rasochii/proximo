@@ -31,7 +31,9 @@ abstract final class FirebaseInitializer {
   static Future<void> _connectEmulators() async {
     final host = _emulatorHost;
     FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
-    FirebaseFunctions.instanceFor(region: AppConfig.functionsRegion).useFunctionsEmulator(host, 5001);
+    FirebaseFunctions.instanceFor(
+      region: AppConfig.functionsRegion,
+    ).useFunctionsEmulator(host, 5001);
     await FirebaseAuth.instance.useAuthEmulator(host, 9099);
   }
 

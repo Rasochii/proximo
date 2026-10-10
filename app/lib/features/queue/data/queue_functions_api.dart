@@ -62,13 +62,22 @@ final class QueueFunctionsApi {
   Future<Result<void>> leaveQueue({required String shopId, required String ticketId}) =>
       _command('leaveQueue', {'shopId': shopId, 'ticketId': ticketId}, _ignore);
 
-  Future<Result<AdvanceResult>> callNext({required String shopId, required FinishOutcome outcome}) =>
+  Future<Result<AdvanceResult>> callNext({
+    required String shopId,
+    required FinishOutcome outcome,
+  }) =>
       _command('callNext', {'shopId': shopId, 'outcome': outcome.wire}, QueueMappers.advanceResult);
 
-  Future<Result<AdvanceResult>> finishCurrent({required String shopId, required FinishOutcome outcome}) =>
-      _command('finishCurrent', {'shopId': shopId, 'outcome': outcome.wire}, QueueMappers.advanceResult);
+  Future<Result<AdvanceResult>> finishCurrent({
+    required String shopId,
+    required FinishOutcome outcome,
+  }) => _command('finishCurrent', {
+    'shopId': shopId,
+    'outcome': outcome.wire,
+  }, QueueMappers.advanceResult);
 
-  Future<Result<void>> undoLast({required String shopId}) => _command('undoLast', {'shopId': shopId}, _ignore);
+  Future<Result<void>> undoLast({required String shopId}) =>
+      _command('undoLast', {'shopId': shopId}, _ignore);
 
   Future<Result<void>> removeTicket({required String shopId, required String ticketId}) =>
       _command('removeTicket', {'shopId': shopId, 'ticketId': ticketId}, _ignore);
@@ -81,7 +90,11 @@ final class QueueFunctionsApi {
 
   static void _ignore(JsonMap _) {}
 
-  Future<Result<T>> _command<T>(String name, JsonMap payload, T Function(JsonMap json) parse) async {
+  Future<Result<T>> _command<T>(
+    String name,
+    JsonMap payload,
+    T Function(JsonMap json) parse,
+  ) async {
     final request = {'requestId': _newRequestId(), ...payload};
 
     for (var attempt = 1; ; attempt++) {

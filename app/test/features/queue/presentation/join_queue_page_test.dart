@@ -59,7 +59,10 @@ void main() {
   });
 
   testWidgets('dados inválidos viram erro com opção de tentar de novo', (tester) async {
-    final docs = FakeDocuments({_shop: shopJson(), _queue: {'shopId': 42}});
+    final docs = FakeDocuments({
+      _shop: shopJson(),
+      _queue: {'shopId': 42},
+    });
     addTearDown(docs.dispose);
     await openShop(tester, docs);
 
