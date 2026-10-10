@@ -70,7 +70,7 @@ O plano completo está em [`docs/PLANO_DE_ACAO.md`](docs/PLANO_DE_ACAO.md).
 |---|---|---|
 | F0 | Fundação do monorepo, emuladores, CI | ✅ |
 | F1 | Núcleo da fila no backend (domínio, callables, regras) | ✅ |
-| F2 | Fundação do app Flutter (dados, auth anônima, i18n) | ✅ |
+| F2 | Fundação do app Flutter (dados, auth anônima, i18n) | 🚧 código pronto, falta validar nos emuladores |
 | F3 | Console do barbeiro | ⏳ |
 | F4 | Experiência do cliente (link/QR, posição ao vivo) | ⏳ |
 | F5 | Cadastro da barbearia | ⏳ |
