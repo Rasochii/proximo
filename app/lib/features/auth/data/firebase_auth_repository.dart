@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:meta/meta.dart';
 import 'package:proximo/core/error/failure.dart';
+import 'package:proximo/core/error/queue_error_code.dart';
 import 'package:proximo/core/result/result.dart';
 import 'package:proximo/features/auth/domain/auth_repository.dart';
 
@@ -36,19 +38,25 @@ final class FirebaseAuthRepository implements AuthRepository {
       final user = _toAppUser(await action());
       return user == null ? const Err(UnauthenticatedFailure()) : Ok(user);
     } on FirebaseAuthException catch (error) {
-      return Err(switch (error.code) {
-        'network-request-failed' => const NetworkFailure(),
-        'invalid-credential' ||
-        'wrong-password' ||
-        'user-not-found' ||
-        'invalid-email' => const PermissionFailure(),
-        _ => UnexpectedFailure(error.code),
-      });
+      return Err(failureFromAuthCode(error.code));
     } on Exception catch (error) {
       // Qualquer outra falha do SDK vira Failure: quem chama nunca fica esperando para sempre.
       return Err(UnexpectedFailure(error));
     }
   }
+
+  /// Traduz o código de erro do Firebase Auth para uma [Failure] que a UI sabe apresentar.
+  @visibleForTesting
+  static Failure failureFromAuthCode(String code) => switch (code) {
+    'network-request-failed' => const NetworkFailure(),
+    // Bloqueio temporário por excesso de tentativas: insistir só prolonga a espera.
+    'too-many-requests' => const QueueRuleFailure(QueueErrorCode.rateLimited),
+    'invalid-credential' ||
+    'wrong-password' ||
+    'user-not-found' ||
+    'invalid-email' => const PermissionFailure(),
+    _ => UnexpectedFailure(code),
+  };
 
   static AppUser? _toAppUser(User? user) => user == null
       ? null
