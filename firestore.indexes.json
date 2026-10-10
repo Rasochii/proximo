@@ -1,0 +1,25 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "days",
+      "fieldPath": "tickets",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "days",
+      "fieldPath": "processed",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "days",
+      "fieldPath": "undo",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "publicQueues",
+      "fieldPath": "waiting",
+      "indexes": []
+    }
+  ]
+}
