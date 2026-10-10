@@ -7,14 +7,75 @@
   "homeJoinAction": "Ver fila",
   "homeBarberTitle": "Sou barbeiro",
   "homeBarberSubtitle": "Abrir o console da barbearia",
-  "joinQueueTitle": "Fila de {shop}",
-  "@joinQueueTitle": {
-    "placeholders": { "shop": { "type": "String" } }
-  },
   "comingSoon": "Em construção — chega na fase {phase} do plano.",
   "@comingSoon": {
-    "placeholders": { "phase": { "type": "String" } }
+    "placeholders": {
+      "phase": {
+        "type": "String"
+      }
+    }
   },
   "notFoundTitle": "Página não encontrada",
-  "backToHome": "Voltar ao início"
+  "backToHome": "Voltar ao início",
+  "retry": "Tentar de novo",
+  "genericError": "Algo deu errado. Tente de novo em instantes.",
+  "networkError": "Sem conexão com o servidor. Verifique a internet.",
+  "shopNotFound": "Barbearia não encontrada. Confira o código ou o QR Code.",
+  "queueNotOpenedYet": "A fila de hoje ainda não foi aberta.",
+  "queueWaitingCount": "{count, plural, =0{Ninguém esperando} =1{1 pessoa esperando} other{{count} pessoas esperando}}",
+  "@queueWaitingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queueEntryEtaLabel": "Se entrar agora",
+  "etaNow": "Atendimento imediato",
+  "etaRange": "~{min}–{max} min",
+  "@etaRange": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "etaBeyondClosing": "Não daria tempo hoje",
+  "etaUnknown": "Aguardando barbeiro",
+  "queueNowServing": "Em atendimento",
+  "queueNobodyServing": "Ninguém em atendimento",
+  "queueWaitingListTitle": "Na fila",
+  "queuePosition": "{position}º",
+  "@queuePosition": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      }
+    }
+  },
+  "queueTicketNumber": "nº {number}",
+  "@queueTicketNumber": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "errorEntriesClosed": "A barbearia não está aceitando novas entradas agora.",
+  "errorClosedToday": "A barbearia está fechada hoje.",
+  "errorNotOpenYet": "A fila ainda não abriu.",
+  "errorClosingSoon": "A barbearia está perto de fechar e não conseguiria te atender hoje.",
+  "errorQueueFull": "A fila de hoje está cheia.",
+  "errorAlreadyInQueue": "Você já está em uma fila.",
+  "errorInvalidName": "Informe um nome válido, só com letras (de 2 a 30).",
+  "errorRateLimited": "Muitas tentativas. Aguarde um pouco e tente de novo.",
+  "errorUndoExpired": "O tempo para desfazer acabou.",
+  "errorUndoConflict": "A fila mudou e não é mais possível desfazer.",
+  "errorBarberNotOnShift": "Inicie o expediente antes de chamar clientes.",
+  "errorBarberNotAvailable": "Seu expediente está pausado.",
+  "errorFinishCurrentFirst": "Finalize o atendimento atual primeiro.",
+  "errorPermission": "Você não tem permissão para fazer isso."
 }
