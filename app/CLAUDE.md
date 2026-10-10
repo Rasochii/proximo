@@ -30,7 +30,7 @@ A regra de negócio da fila (posição, ETA, transições) **fica no servidor**.
 - Para ler um stream, crie um provider que retorna `Stream<T>`. A UI trata `AsyncValue` com switch/`when`, cobrindo loading, error e data.
 - Comandos ficam em métodos de `Notifier`/`AsyncNotifier`. Depois de um `await`, cheque `ref.mounted` antes de alterar o estado.
 - Use `ref.watch` no build, `ref.read` em callbacks e `ref.listen` para efeitos (snackbar, navegação, haptics).
-- O Riverpod 3 refaz automaticamente providers que falham. Para erros que não se resolvem tentando de novo (por exemplo, `permission-denied`), configure o `retry`.
+- O Riverpod 3 refaz automaticamente providers que falham e, enquanto tenta, o estado fica em loading: a tela de erro nunca aparece. Por isso o `ProviderScope` do app e o dos testes usam `noAutomaticRetry` (`core/config/provider_retry.dart`). Só ligue `retry` num provider específico se o erro dele for mesmo transitório.
 - Nos testes, use `ProviderContainer.test(overrides: [...])` e substitua os repositórios por fakes.
 
 ## Chamando o backend

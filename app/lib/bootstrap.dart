@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:proximo/core/config/app_env.dart';
+import 'package:proximo/core/config/provider_retry.dart';
 import 'package:proximo/core/firebase/firebase_initializer.dart';
 
 /// Ponto único de inicialização: erros globais, Firebase e escopo do Riverpod.
@@ -22,5 +23,5 @@ Future<void> bootstrap(Widget Function() builder) async {
   await FirebaseInitializer.initialize(env);
   if (kDebugMode) log('Próximo! iniciado no ambiente ${env.name}', name: 'bootstrap');
 
-  runApp(ProviderScope(child: builder()));
+  runApp(ProviderScope(retry: noAutomaticRetry, child: builder()));
 }

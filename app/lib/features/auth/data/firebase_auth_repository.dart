@@ -44,6 +44,9 @@ final class FirebaseAuthRepository implements AuthRepository {
         'invalid-email' => const PermissionFailure(),
         _ => UnexpectedFailure(error.code),
       });
+    } on Exception catch (error) {
+      // Qualquer outra falha do SDK vira Failure: quem chama nunca fica esperando para sempre.
+      return Err(UnexpectedFailure(error));
     }
   }
 

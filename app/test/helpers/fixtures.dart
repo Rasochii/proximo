@@ -3,9 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proximo/app.dart';
+import 'package:proximo/core/config/provider_retry.dart';
 import 'package:proximo/core/firebase/backend_ports.dart';
 import 'package:proximo/core/firebase/firebase_providers.dart';
 import 'package:proximo/core/json/json.dart';
+import 'package:proximo/features/auth/domain/auth_repository.dart';
+import 'package:proximo/features/auth/presentation/auth_providers.dart';
+
+import 'fake_auth.dart';
 
 /// Documento `shops/barbearia-do-ze` no formato gravado pelo backend.
 JsonMap shopJson() => {
@@ -95,20 +100,25 @@ final class FakeDocuments {
 ///
 /// Sem [invoke], qualquer chamada a uma callable falha o teste: o repositório da fila depende do
 /// invocador mesmo nas telas que só leem, e o provider real exigiria o Firebase inicializado.
+/// Sem [auth], ninguém está logado.
 Future<void> pumpProximoApp(
   WidgetTester tester, {
   required DocumentWatcher watch,
   CallableInvoker? invoke,
+  AuthRepository? auth,
 }) async {
+  final fakeAuth = auth ?? FakeAuthRepository();
+  if (auth == null) addTearDown((fakeAuth as FakeAuthRepository).dispose);
   await tester.pumpWidget(
     ProviderScope(
-      // Sem novas tentativas automáticas: erros devem aparecer de imediato e sem timers pendentes.
-      retry: (retryCount, error) => null,
+      // A mesma política do app (bootstrap.dart): erros aparecem de imediato, sem timers pendentes.
+      retry: noAutomaticRetry,
       overrides: [
         documentWatcherProvider.overrideWithValue(watch),
         callableInvokerProvider.overrideWithValue(
           invoke ?? (name, payload) => fail('Callable "$name" chamada sem um invocador falso.'),
         ),
+        authRepositoryProvider.overrideWithValue(fakeAuth),
       ],
       child: const ProximoApp(),
     ),
