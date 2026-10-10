@@ -12,7 +12,7 @@ Plano completo em `docs/PLANO_DE_ACAO.md` · decisões em `docs/adr/` · regras 
 
 ## Invariantes (só mudam com um ADR novo)
 
-1. **O app nunca escreve no Firestore** (ADR 0004). Toda mutação é uma callable que roda numa transação. O app só lê `publicQueues/{shopId}` e `activeTickets/{uid}`; a equipe também lê `shops/{shopId}/days/{dateKey}`.
+1. **O app nunca escreve no Firestore** (ADR 0004). Toda mutação é uma callable que roda numa transação. O app só lê `publicQueues/{shopId}` e `activeTickets/{uid}`; a equipe também lê `staff/{uid}` (ADR 0007) e `shops/{shopId}/days/{dateKey}`.
 2. **A fila do dia é um único documento**, `shops/{shopId}/days/{yyyy-MM-dd}` (ADR 0003). Não use subcoleção de tickets.
 3. **O domínio é puro** (`functions/src/domain/`): sem `firebase-*`, sem I/O, sem `Date.now()`. O tempo chega por `ctx.nowMs`, e o ESLint bloqueia os imports proibidos.
 4. **Idempotência:** toda callable que altera dados recebe um `requestId` UUID v4 gerado no app, e o mesmo valor é reutilizado nos retries.

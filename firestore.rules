@@ -5,7 +5,7 @@ rules_version = '2';
 //  • deny-by-default;
 //  • NENHUMA escrita do cliente: toda mutação passa pelas Cloud Functions (Admin SDK ignora estas regras);
 //  • leitura mínima: projeção pública para todos, agregado do dia só para a equipe,
-//    ticket ativo só para o próprio usuário.
+//    ticket ativo e vínculo de equipe só para o próprio usuário.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -50,6 +50,12 @@ service cloud.firestore {
 
     // Ticket ativo: só o próprio usuário enxerga.
     match /activeTickets/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    // Vínculo de equipe (ADR 0007): diz ao app de qual barbearia o usuário logado faz parte.
+    match /staff/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow list, write: if false;
     }

@@ -8,7 +8,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { after, before, beforeEach, describe, it } from 'node:test';
@@ -40,6 +40,7 @@ beforeEach(async () => {
     await setDoc(doc(db, `publicQueues/${SHOP}`), { waiting: [] });
     await setDoc(doc(db, 'activeTickets/cliente'), { shopId: SHOP, ticketId: 't1' });
     await setDoc(doc(db, 'rateLimits/cliente'), { join: [] });
+    await setDoc(doc(db, 'staff/ze'), { shopId: SHOP, role: 'owner' });
   });
 });
 
@@ -66,6 +67,21 @@ describe('leitura', () => {
     await assertFails(getDoc(doc(asGuest(), 'activeTickets/cliente')));
   });
 
+  it('vínculo de equipe só é visível para o próprio usuário', async () => {
+    await assertSucceeds(getDoc(doc(asUser('ze'), 'staff/ze')));
+    await assertFails(getDoc(doc(asUser('cliente'), 'staff/ze')));
+    await assertFails(getDoc(doc(asGuest(), 'staff/ze')));
+  });
+
+  it('quem não é de nenhuma equipe lê o próprio vínculo como inexistente, sem erro', async () => {
+    await assertSucceeds(getDoc(doc(asUser('cliente'), 'staff/cliente')));
+  });
+
+  it('ninguém lista os vínculos de equipe', async () => {
+    await assertFails(getDocs(collection(asUser('ze'), 'staff')));
+    await assertFails(getDocs(query(collection(asUser('ze'), 'staff'), where('shopId', '==', SHOP))));
+  });
+
   it('ninguém lê os rate limits', async () => {
     await assertFails(getDoc(doc(asUser('cliente'), 'rateLimits/cliente')));
   });
@@ -80,6 +96,8 @@ describe('escrita', () => {
       await assertFails(setDoc(doc(db, `publicQueues/${SHOP}`), { waiting: [] }));
       await assertFails(setDoc(doc(db, `activeTickets/${uid}`), { ticketId: 'x' }));
       await assertFails(setDoc(doc(db, `shops/${SHOP}/members/${uid}`), { role: 'owner', active: true }));
+      await assertFails(setDoc(doc(db, `staff/${uid}`), { shopId: SHOP, role: 'owner' }));
+      await assertFails(deleteDoc(doc(db, `staff/${uid}`)));
     }
   });
 });

@@ -67,12 +67,17 @@ async function main(): Promise<void> {
     } catch (error) {
       if ((error as { code?: string }).code !== 'auth/uid-already-exists') throw error;
     }
-    await db.doc(`shops/${SHOP_ID}/members/${barber.uid}`).set({
-      role: barber.role,
-      displayName: barber.displayName,
-      active: true,
-      joinedAt: Date.now(),
-    });
+    // O membro e o vínculo lido pelo app depois do login são gravados juntos (ADR 0007).
+    await db
+      .batch()
+      .set(db.doc(`shops/${SHOP_ID}/members/${barber.uid}`), {
+        role: barber.role,
+        displayName: barber.displayName,
+        active: true,
+        joinedAt: Date.now(),
+      })
+      .set(db.doc(`staff/${barber.uid}`), { shopId: SHOP_ID, role: barber.role, updatedAt: Date.now() })
+      .commit();
   }
 
   // Projeção pública da fila vazia de hoje, para a rota /b/:slug já mostrar a fila antes do primeiro comando.

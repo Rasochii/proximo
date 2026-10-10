@@ -43,6 +43,7 @@ Detalhes e trade-offs em [`docs/adr/`](adr/).
 | `shops/{shopId}/private/stats` | Últimas durações por serviço (mediana alimenta o ETA) | Equipe | Servidor |
 | `publicQueues/{shopId}` | Projeção pública: posição, rótulo ("Lucas M."), ETA, quem está sendo atendido | Todos | Servidor |
 | `activeTickets/{uid}` | Ticket ativo do usuário (garante 1 por pessoa) | O próprio usuário | Servidor |
+| `staff/{uid}` | Vínculo de equipe: `shopId` e papel ([ADR 0007](adr/0007-vinculo-de-equipe-em-staff.md)) | O próprio usuário | Servidor |
 | `rateLimits/{uid}` | Janela de tentativas | Ninguém | Servidor |
 
 **Ciclo de vida do ticket**
