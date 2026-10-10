@@ -35,12 +35,22 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
+    env:
+      # `secrets` não pode ser usado no `if` do job; sem o token os passos são pulados e o check
+      # fica verde, em vez de falhar em todo PR enquanto a revisão não estiver configurada.
+      HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
+      - name: Revisão não configurada
+        if: env.HAS_TOKEN != 'true'
+        run: echo "::notice title=Revisão pulada::O secret CLAUDE_CODE_OAUTH_TOKEN não existe neste repositório."
+
       - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
         with:
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
+        if: env.HAS_TOKEN == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |

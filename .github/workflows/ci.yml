@@ -75,4 +75,4 @@ jobs:
           dart analyze --format=machine > analysis.txt 2>&1 || true
           awk -F'|' -v root="$GITHUB_WORKSPACE/" 'NF >= 8 { path = $4; sub(root, "", path); level = ($1 == "ERROR") ? "error" : "warning"; printf "::%s file=%s,line=%s,col=%s,title=%s::%s\n", level, path, $5, $6, $3, $8 }' analysis.txt
           flutter analyze
-      - run: flutter test --coverage
+      - run: flutter test --coverage --reporter github
