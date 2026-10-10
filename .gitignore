@@ -36,3 +36,7 @@ Thumbs.db
 app/lib/l10n/gen/
 **/*.g.dart
 **/*.freezed.dart
+
+# Claude Code (configurações pessoais e cache dos hooks)
+.claude/settings.local.json
+.claude/.cache/
