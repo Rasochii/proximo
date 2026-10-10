@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Necessário para o Flutter (hot reload, DevTools) no build de debug. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Os emuladores do Firebase usam HTTP sem TLS: liberado SOMENTE no build de debug. -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

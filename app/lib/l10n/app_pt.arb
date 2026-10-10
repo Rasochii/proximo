@@ -1,0 +1,20 @@
+{
+  "@@locale": "pt",
+  "appTitle": "Próximo!",
+  "homeTagline": "Espere onde quiser. A gente avisa quando for sua vez.",
+  "homeJoinTitle": "Entrar em uma fila",
+  "homeJoinHint": "Código da barbearia",
+  "homeJoinAction": "Ver fila",
+  "homeBarberTitle": "Sou barbeiro",
+  "homeBarberSubtitle": "Abrir o console da barbearia",
+  "joinQueueTitle": "Fila de {shop}",
+  "@joinQueueTitle": {
+    "placeholders": { "shop": { "type": "String" } }
+  },
+  "comingSoon": "Em construção — chega na fase {phase} do plano.",
+  "@comingSoon": {
+    "placeholders": { "phase": { "type": "String" } }
+  },
+  "notFoundTitle": "Página não encontrada",
+  "backToHome": "Voltar ao início"
+}

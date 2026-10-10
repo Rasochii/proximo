@@ -17,7 +17,6 @@ app/.dart_tool/
 app/build/
 app/.flutter-plugins
 app/.flutter-plugins-dependencies
-app/**/*.g.dart.bak
 app/coverage/
 app/android/.gradle/
 app/android/local.properties
@@ -32,3 +31,8 @@ app/ios/.symlinks/
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
+
+# Gerados pelo Flutter
+app/lib/l10n/gen/
+**/*.g.dart
+**/*.freezed.dart
