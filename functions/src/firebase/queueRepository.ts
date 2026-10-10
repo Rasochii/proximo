@@ -40,6 +40,8 @@ export interface CommandInput {
 
 export interface QueueCommandSpec<R> {
   readonly shopId: string;
+  /** Usado para não consumir rate limit em retries de uma requisição já processada. */
+  readonly requestId: string;
   readonly actorUid: string;
   /** Exige que o ator seja membro ativo da barbearia (barbeiro ou dono). */
   readonly requireMember: boolean;
@@ -86,8 +88,11 @@ export async function runQueueCommand<R>(spec: QueueCommandSpec<R>): Promise<R> 
       throw new HttpsError('permission-denied', 'Você não faz parte da equipe desta barbearia.');
     }
 
+    const day = daySnap.exists ? fromDayDoc(daySnap) : createQueueDay(shop.id, dateKey, nowMs);
+    const isRetry = day.processed.some((p) => p.requestId === spec.requestId);
+
     let rateHistory: readonly number[] | null = null;
-    if (spec.rateLimit && rateSnap) {
+    if (spec.rateLimit && rateSnap && !isRetry) {
       const stored = rateSnap.get(spec.rateLimit.key) as unknown;
       const decision = consumeRateLimit(Array.isArray(stored) ? stored.filter(isNumber) : [], nowMs, spec.rateLimit.policy);
       if (!decision.allowed) throw new DomainError('rate-limited', undefined, { retryAfterMs: decision.retryAfterMs });
@@ -95,7 +100,6 @@ export async function runQueueCommand<R>(spec: QueueCommandSpec<R>): Promise<R> 
     }
 
     const stats = (statsSnap.get('services') ?? {}) as ServiceStats;
-    const day = daySnap.exists ? fromDayDoc(daySnap) : createQueueDay(shop.id, dateKey, nowMs);
     const ctx: DayContext = { nowMs, shop, stats };
 
     const outcome = spec.execute({

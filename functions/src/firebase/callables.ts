@@ -53,6 +53,7 @@ export const joinQueue = callable('joinQueue', async (request, uid) => {
   const newTicketId = refs.newId();
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: false,
     loadActiveTicket: true,
@@ -75,6 +76,7 @@ export const leaveQueue = callable('leaveQueue', async (request, uid) => {
   const input = parseTicketInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: false,
     execute: ({ day, ctx }) =>
@@ -90,6 +92,7 @@ export const callNext = callable('callNext', async (request, uid) => {
   const input = parseAdvanceInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) =>
@@ -101,6 +104,7 @@ export const finishCurrent = callable('finishCurrent', async (request, uid) => {
   const input = parseAdvanceInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) =>
@@ -112,6 +116,7 @@ export const undoLast = callable('undoLast', async (request, uid) => {
   const input = parseShopActionInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) => undoLastCommand(day, ctx, { requestId: input.requestId, actorUid: uid, barberId: uid }),
@@ -122,6 +127,7 @@ export const removeTicket = callable('removeTicket', async (request, uid) => {
   const input = parseTicketInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) =>
@@ -133,6 +139,7 @@ export const setBarberStatus = callable('setBarberStatus', async (request, uid) 
   const input = parseBarberStatusInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx, member }) =>
@@ -150,6 +157,7 @@ export const setAcceptingEntries = callable('setAcceptingEntries', async (reques
   const input = parseAcceptingEntriesInput(request.data);
   return runQueueCommand({
     shopId: input.shopId,
+    requestId: input.requestId,
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) =>

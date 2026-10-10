@@ -328,6 +328,12 @@ describe('removeTicket', () => {
     assert.deepEqual(outcome.effects, [{ type: 'activeTicket.clear', uid: 'troll', ticketId: 't-troll' }]);
   });
 
+  it('o dono pode remover mesmo fora do expediente', () => {
+    const day = join(openDay(), { uid: 'troll', nowMs: T10 });
+    const outcome = removeTicket(day, ctxAt(T10), { requestId: uuid(), actorUid: 'dono', barberId: 'dono', ticketId: 't-troll' });
+    assert.equal(ticketStatus(outcome.day, 't-troll'), 'removed');
+  });
+
   it('não remove ticket já chamado', () => {
     let day = join(openDay(), { uid: 'a', nowMs: T10 });
     day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;

@@ -369,7 +369,7 @@ export interface RemoveTicketCommand extends BarberCommand {
 /** Barbeiro remove um ticket aguardando (ex.: nome ofensivo, entrada falsa). */
 export function removeTicket(day: QueueDay, ctx: DayContext, cmd: RemoveTicketCommand): CommandOutcome<TicketResult> {
   return execute('removeTicket', day, ctx, cmd, () => {
-    requireBarberOnShift(day, cmd.barberId);
+    // Qualquer membro da equipe pode remover (ex.: o dono fora do expediente), validado na infraestrutura.
     const ticket = findTicket(day, cmd.ticketId);
     if (!ticket) throw new DomainError('ticket-not-found');
     if (ticket.status !== 'waiting') throw new DomainError('invalid-ticket-state');
