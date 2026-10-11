@@ -73,11 +73,12 @@ class QueueSummaryCard extends StatelessWidget {
   }
 }
 
-/// Quem está na cadeira agora.
+/// Quem está na cadeira agora. Recebe a lista pronta para o console poder mostrar só os outros
+/// barbeiros.
 class NowServingSection extends StatelessWidget {
-  const NowServingSection({required this.queue, super.key});
+  const NowServingSection({required this.tickets, super.key});
 
-  final PublicQueue queue;
+  final List<ServingTicket> tickets;
 
   @override
   Widget build(BuildContext context) {
@@ -88,14 +89,14 @@ class NowServingSection extends StatelessWidget {
       children: [
         QueueSectionTitle(l10n.queueNowServing),
         const SizedBox(height: Insets.sm),
-        if (queue.nowServing.isEmpty)
+        if (tickets.isEmpty)
           Text(l10n.queueNobodyServing)
         else
           Wrap(
             spacing: Insets.sm,
             runSpacing: Insets.sm,
             children: [
-              for (final ticket in queue.nowServing)
+              for (final ticket in tickets)
                 Chip(
                   avatar: const Icon(Icons.content_cut_rounded, size: 18),
                   label: Text('${l10n.queueTicketNumber(ticket.number)} · ${ticket.label}'),

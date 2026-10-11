@@ -48,6 +48,7 @@ cd app && flutter run -d chrome
 | Callable responde `unauthenticated` | App não fez login (nem anônimo) antes da chamada, ou Auth não está conectado ao emulador. |
 | `permission-denied` na leitura | Rules negando: o app tentou ler um caminho que não é público. Confira `firestore.rules`. |
 | App web não conecta | Rodou com `--dart-define=ENV=prod` sem querer, ou `EMULATOR_HOST` apontando para IP errado. |
+| Login no web devolve "Algo deu errado" com a senha certa, usando `flutter build web` + Hosting local | O navegador guardou a sessão de um login anterior. Com uma sessão salva, o SDK do Auth faz uma chamada de rede antes do `useAuthEmulator`, que então falha em silêncio, e o login vai para o endpoint real com a chave fictícia. Saia da conta antes de derrubar os emuladores, ou apague os dados do site (`firebaseLocalStorageDb` no IndexedDB). Com `flutter run -d chrome` (debug, perfil novo a cada execução) não acontece. |
 | Dados somem ao reiniciar | Normal. Para persistir: `firebase emulators:start --import=./emulator-data --export-on-exit` (pasta já ignorada no git). |
 
 ## Ao verificar um fluxo

@@ -8,13 +8,14 @@ import 'package:proximo/features/auth/domain/auth_repository.dart';
 import 'package:proximo/features/auth/domain/staff_membership.dart';
 import 'package:proximo/features/auth/presentation/auth_providers.dart';
 import 'package:proximo/features/auth/presentation/login_view.dart';
+import 'package:proximo/features/barber_console/presentation/shop_console_view.dart';
 import 'package:proximo/features/shop/presentation/shop_providers.dart';
 import 'package:proximo/l10n/gen/app_localizations.dart';
 
 /// Console do barbeiro. Decide o que mostrar pelo usuário logado: login, aviso de conta sem
 /// barbearia ou o console da barbearia dele.
 ///
-/// F3/T2: acesso e vínculo. A fila e o "Próximo!" chegam nas próximas tarefas da F3.
+/// O console em si (expediente e fila) está em `ShopConsoleView`.
 class ConsolePage extends ConsumerWidget {
   const ConsolePage({super.key});
 
@@ -71,10 +72,8 @@ class ConsolePage extends ConsumerWidget {
           ],
         ),
       ),
-      (AsyncData(), AsyncData(value: final StaffMembership staff)) => _ShopConsole(
-        shopId: staff.shopId,
-        onSignOut: signOut,
-      ),
+      (AsyncData(value: final AppUser user), AsyncData(value: final StaffMembership staff)) =>
+        _ShopConsole(shopId: staff.shopId, barberId: user.uid, onSignOut: signOut),
       // Equipe logada esperando o vínculo: já pode sair se a espera não terminar.
       (AsyncData(), _) => _ConsoleScaffold(
         accountAction: _SignOutButton(onSignOut: signOut),
@@ -85,16 +84,16 @@ class ConsolePage extends ConsumerWidget {
   }
 }
 
-/// Console de uma barbearia. Por enquanto só identifica a barbearia e permite sair.
+/// Console de uma barbearia: o nome dela no topo, a conta num menu e o expediente com a fila.
 class _ShopConsole extends ConsumerWidget {
-  const _ShopConsole({required this.shopId, required this.onSignOut});
+  const _ShopConsole({required this.shopId, required this.barberId, required this.onSignOut});
 
   final String shopId;
+  final String barberId;
   final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
     final shop = ref.watch(shopProvider(shopId));
 
     return _ConsoleScaffold(
@@ -102,12 +101,7 @@ class _ShopConsole extends ConsumerWidget {
       brandLeadsHome: false,
       // No console em uso, sair fica a dois toques: um esbarrão não derruba a sessão no balcão.
       accountAction: _AccountMenu(onSignOut: onSignOut),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.lg),
-          child: Text(l10n.comingSoon('F3'), textAlign: TextAlign.center),
-        ),
-      ),
+      child: ShopConsoleView(shopId: shopId, barberId: barberId),
     );
   }
 }
