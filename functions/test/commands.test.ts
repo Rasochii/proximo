@@ -144,6 +144,14 @@ describe('joinQueue', () => {
     throwsCode(() => joinQueue(day, ctxAt(now), joinCmd()), 'closing-soon');
   });
 
+  it('sem barbeiro disponível não há previsão de espera e a entrada continua aberta', () => {
+    const now = at(`${SATURDAY}T17:30`);
+    let day = emptyDay();
+    // A mesma fila do teste acima, mas ninguém iniciou o expediente: não dá para dizer que o 4º não cabe.
+    for (const uid of ['a', 'b', 'c']) day = join(day, { uid, nowMs: now });
+    assert.equal(joinQueue(day, ctxAt(now), joinCmd()).result.number, 4);
+  });
+
   it('respeita o limite diário de tickets', () => {
     const tightShop = { ...shop, settings: { ...shop.settings, maxTicketsPerDay: 1 } };
     const day = join(openDay(), { uid: 'a', nowMs: T10 });
