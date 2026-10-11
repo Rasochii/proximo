@@ -28,14 +28,6 @@
   "shopNotFoundAction": "Tentar outro código",
   "queueWaitingEmpty": "Ninguém na fila no momento.",
   "siteFooterTagline": "Próximo! · fila virtual para barbearias",
-  "comingSoon": "Em construção — chega na fase {phase} do plano.",
-  "@comingSoon": {
-    "placeholders": {
-      "phase": {
-        "type": "String"
-      }
-    }
-  },
   "notFoundTitle": "Página não encontrada",
   "backToHome": "Voltar ao início",
   "retry": "Tentar de novo",
@@ -114,6 +106,21 @@
   "loginHelp": "Não lembra a senha ou ainda não tem acesso? Fale com o dono da barbearia.",
   "loadingLabel": "Carregando…",
   "consoleTitle": "Console do barbeiro",
+  "consoleShiftOffTitle": "Fora do expediente",
+  "consoleShiftOffHint": "Inicie o expediente para aparecer na fila e chamar clientes.",
+  "consoleShiftStartAction": "Iniciar expediente",
+  "consoleShiftAvailable": "Em expediente",
+  "consoleShiftPaused": "Em pausa",
+  "consoleShiftPausedHint": "Os clientes continuam na fila, mas você não chama ninguém até voltar.",
+  "consoleShiftPauseAction": "Fazer pausa",
+  "consoleShiftResumeAction": "Voltar da pausa",
+  "consoleShiftEndAction": "Encerrar expediente",
+  "consoleShiftStarting": "Iniciando…",
+  "consoleShiftPausing": "Pausando…",
+  "consoleShiftResuming": "Retomando…",
+  "consoleShiftEnding": "Encerrando…",
+  "consoleShiftMoreActions": "Mais ações do expediente",
+  "consoleServingNowLabel": "Atendendo agora",
   "consoleNoMembership": "Esta conta não faz parte de nenhuma barbearia. Peça ao dono para adicionar você à equipe.",
   "consoleSwitchAccountAction": "Entrar com outra conta",
   "accountMenuTooltip": "Conta",

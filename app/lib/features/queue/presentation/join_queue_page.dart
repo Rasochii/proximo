@@ -116,7 +116,7 @@ class _CompactQueueView extends StatelessWidget {
       children: [
         QueueSummaryCard(queue: queue),
         const SizedBox(height: Insets.lg),
-        NowServingSection(queue: queue),
+        NowServingSection(tickets: queue.nowServing),
         if (queue.waiting.isNotEmpty) ...[
           const SizedBox(height: Insets.lg),
           QueueSectionTitle(AppLocalizations.of(context).queueWaitingListTitle),
@@ -145,7 +145,7 @@ class _WideQueueView extends StatelessWidget {
             children: [
               QueueSummaryCard(queue: queue),
               const SizedBox(height: Insets.lg),
-              NowServingSection(queue: queue),
+              NowServingSection(tickets: queue.nowServing),
             ],
           ),
         ),

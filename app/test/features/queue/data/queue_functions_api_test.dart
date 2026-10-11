@@ -178,6 +178,13 @@ void main() {
       ).joinQueue(shopId: 's', name: 'Lucas', serviceId: 'corte', source: TicketSource.link);
       expect(result.failureOrNull, isA<UnexpectedFailure>());
     });
+
+    test('exceção de outro tipo também vira UnexpectedFailure, sem escapar para a tela', () async {
+      final backend = FakeBackend([() => throw Exception('falha do SDK')]);
+      final result = await apiWith(backend).undoLast(shopId: 's');
+      expect(result.failureOrNull, isA<UnexpectedFailure>());
+      expect(backend.calls, hasLength(1));
+    });
   });
 
   group('callNext', () {

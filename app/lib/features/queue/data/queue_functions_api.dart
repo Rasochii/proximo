@@ -108,6 +108,9 @@ final class QueueFunctionsApi {
         await _sleep(_retry.delayFor(attempt));
       } on FormatException catch (error) {
         return Err(UnexpectedFailure(error));
+      } on Exception catch (error) {
+        // É nesta camada que exceção vira Failure: quem chama nunca fica esperando para sempre.
+        return Err(UnexpectedFailure(error));
       }
     }
   }

@@ -46,6 +46,23 @@ final class PublicQueue {
     }
     return null;
   }
+
+  /// Situação de um barbeiro. A fila pública só lista quem está em expediente, então quem não
+  /// aparece está fora dele.
+  BarberStatus statusOf(String barberId) {
+    for (final barber in barbers) {
+      if (barber.id == barberId) return barber.status;
+    }
+    return BarberStatus.off;
+  }
+
+  /// Quem o barbeiro está atendendo agora, se houver.
+  ServingTicket? servedBy(String barberId) {
+    for (final ticket in nowServing) {
+      if (ticket.barberId == barberId) return ticket;
+    }
+    return null;
+  }
 }
 
 /// Se dá para entrar agora e com qual espera estimada.

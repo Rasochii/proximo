@@ -33,7 +33,13 @@ JsonMap shopJson() => {
 };
 
 /// Documento `publicQueues/barbearia-do-ze` exatamente como `buildPublicQueue` produz.
-JsonMap publicQueueJson({int waiting = 2}) => {
+///
+/// [barbers] troca os barbeiros em expediente; [servingBarberId] diz quem atende o ticket nº 1.
+JsonMap publicQueueJson({
+  int waiting = 2,
+  List<JsonMap>? barbers,
+  String servingBarberId = 'ze',
+}) => {
   'shopId': 'barbearia-do-ze',
   'shopName': 'Barbearia do Zé',
   'slug': 'barbearia-do-ze',
@@ -43,11 +49,13 @@ JsonMap publicQueueJson({int waiting = 2}) => {
     'reason': null,
     'eta': {'kind': 'estimated', 'startsInMin': 25 + waiting * 30},
   },
-  'barbers': [
-    {'id': 'ze', 'displayName': 'Zé', 'status': 'available', 'servingNumber': 1},
-  ],
+  'barbers':
+      barbers ??
+      [
+        {'id': 'ze', 'displayName': 'Zé', 'status': 'available', 'servingNumber': 1},
+      ],
   'nowServing': [
-    {'ticketId': 't1', 'number': 1, 'label': 'Ana S.', 'barberId': 'ze'},
+    {'ticketId': 't1', 'number': 1, 'label': 'Ana S.', 'barberId': servingBarberId},
   ],
   'waiting': [
     for (var i = 0; i < waiting; i++)
