@@ -8,6 +8,7 @@ import 'package:proximo/features/queue/domain/queue_types.dart';
 abstract final class QueueMappers {
   static PublicQueue publicQueue(JsonMap json) {
     final entry = json.readMap('entry');
+    final validUntil = json.readIntOrNull('validUntil');
     return PublicQueue(
       shopId: json.readString('shopId'),
       shopName: json.readString('shopName'),
@@ -22,6 +23,7 @@ abstract final class QueueMappers {
       waiting: json.readList('waiting', _waiting),
       version: json.readInt('version'),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(json.readInt('updatedAt')),
+      validUntil: validUntil == null ? null : DateTime.fromMillisecondsSinceEpoch(validUntil),
     );
   }
 

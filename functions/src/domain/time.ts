@@ -70,6 +70,30 @@ export function toLocal(epochMs: number, timeZone: string): LocalDateTime {
   };
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Instante (epoch ms) em que termina o dia local de `epochMs`: o primeiro milissegundo do dia
+ * seguinte no fuso informado.
+ *
+ * Procura a virada por busca binária em vez de somar 24 h, porque nos dias de troca de horário de
+ * verão o dia tem 23 ou 25 horas (e em alguns fusos a meia-noite nem existe).
+ *
+ * Pressupõe que o dia local não passa de 26 h e que a data não volta atrás nesse intervalo, o que
+ * vale para as regras de fuso atuais.
+ */
+export function endOfLocalDayMs(epochMs: number, timeZone: string): number {
+  const today = toLocal(epochMs, timeZone).dateKey;
+  let stillToday = epochMs;
+  let alreadyLater = epochMs + 26 * HOUR_MS; // um dia local nunca passa de 25 h
+  while (alreadyLater - stillToday > 1) {
+    const middle = stillToday + Math.floor((alreadyLater - stillToday) / 2);
+    if (toLocal(middle, timeZone).dateKey === today) stillToday = middle;
+    else alreadyLater = middle;
+  }
+  return alreadyLater;
+}
+
 const HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /** "HH:mm" → minutos desde a meia-noite; aceita "24:00" como fim do dia. Retorna null se inválido. */

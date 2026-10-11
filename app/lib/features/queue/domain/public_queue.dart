@@ -17,6 +17,7 @@ final class PublicQueue {
     required this.waiting,
     required this.version,
     required this.updatedAt,
+    this.validUntil,
   });
 
   final String shopId;
@@ -28,6 +29,13 @@ final class PublicQueue {
   final List<WaitingTicket> waiting;
   final int version;
   final DateTime updatedAt;
+
+  /// Até quando esta fila vale: o fim do dia da barbearia, calculado pelo servidor. Depois disso
+  /// ela é a fila de ontem. `null` em projeções antigas, gravadas antes de o prazo existir.
+  final DateTime? validUntil;
+
+  /// Se a fila ainda é a do dia corrente em [now].
+  bool isValidAt(DateTime now) => validUntil?.isAfter(now) ?? true;
 
   int get waitingCount => waiting.length;
 

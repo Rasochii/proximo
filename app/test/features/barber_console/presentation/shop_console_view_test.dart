@@ -37,6 +37,7 @@ Future<({FakeDocuments docs, FakeCallables backend})> openConsole(
   WidgetTester tester, {
   JsonMap? queue,
   FakeCallables? backend,
+  DateTime Function()? clock,
 }) async {
   final docs = FakeDocuments({
     _shop: shopJson(),
@@ -48,7 +49,13 @@ Future<({FakeDocuments docs, FakeCallables backend})> openConsole(
   addTearDown(docs.dispose);
   addTearDown(auth.dispose);
 
-  await pumpProximoApp(tester, watch: docs.watch, invoke: callables.invoke, auth: auth);
+  await pumpProximoApp(
+    tester,
+    watch: docs.watch,
+    invoke: callables.invoke,
+    auth: auth,
+    clock: clock,
+  );
   // Pela rota, e não pelo botão da inicial: assim o teste não depende do layout da inicial.
   GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/console');
   await tester.pumpAndSettle();
@@ -340,6 +347,19 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Fora do expediente'), findsNothing);
+  });
+
+  testWidgets('quem não encerrou ontem começa hoje fora do expediente, sem a fila de ontem', (
+    tester,
+  ) async {
+    // A fila pública de ontem ainda diz que o Zé está em expediente, com duas pessoas esperando.
+    final yesterday = {...queueWithZe('available')};
+    yesterday['validUntil'] = DateTime(2026, 10, 11).millisecondsSinceEpoch;
+    await openConsole(tester, queue: yesterday, clock: () => DateTime(2026, 10, 11, 8));
+
+    expect(find.text('Fora do expediente'), findsOneWidget);
+    expect(find.text('Iniciar expediente'), findsOneWidget);
+    expect(find.text('Lucas M.'), findsNothing);
   });
 
   testWidgets('erro ao ler a fila oferece tentar de novo', (tester) async {

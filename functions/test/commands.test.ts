@@ -363,6 +363,16 @@ describe('setBarberStatus', () => {
 });
 
 describe('buildPublicQueue', () => {
+  it('um dia já encerrado, projetado depois, nasce vencido', () => {
+    const day = openDay();
+    const sunday = at('2026-10-11T08:00');
+
+    const view = buildPublicQueue(day, ctxAt(sunday));
+
+    assert.equal(view.dateKey, SATURDAY);
+    assert.equal(view.validUntil, sunday);
+  });
+
   it('expõe posição, ETA e quem está sendo atendido sem vazar dados pessoais', () => {
     let day = openDay();
     for (const uid of ['a', 'b', 'c']) day = join(day, { uid, name: `Fulano ${uid} Silva`, nowMs: T10 });
@@ -380,6 +390,8 @@ describe('buildPublicQueue', () => {
     assert.deepEqual(view.nowServing, [{ ticketId: 't-a', number: 1, label: 'Fulano S.', barberId: 'ze' }]);
     assert.deepEqual(view.barbers, [{ id: 'ze', displayName: 'ZE', status: 'available', servingNumber: 1 }]);
     assert.equal(view.entry.open, true);
+    // Vale até o fim do dia da barbearia (meia-noite em São Paulo), não até a meia-noite UTC.
+    assert.equal(view.validUntil, at('2026-10-11T00:00'));
 
     const serialized = JSON.stringify(view);
     for (const secret of ['customerUid', 'displayName":"Fulano', '"a"', 'Silva']) {

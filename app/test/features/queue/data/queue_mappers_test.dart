@@ -24,6 +24,23 @@ void main() {
       expect(queue.updatedAt, DateTime.fromMillisecondsSinceEpoch(1791661200000));
     });
 
+    test('lê até quando a fila vale e sabe dizer se ainda é a de hoje', () {
+      final midnight = DateTime(2026, 10, 11);
+      final queue = QueueMappers.publicQueue(publicQueueJson(validUntil: midnight));
+
+      expect(queue.validUntil, midnight);
+      expect(queue.isValidAt(DateTime(2026, 10, 10, 23, 59)), isTrue);
+      expect(queue.isValidAt(midnight), isFalse);
+      expect(queue.isValidAt(DateTime(2026, 10, 11, 8)), isFalse);
+    });
+
+    test('projeção antiga, sem prazo, continua valendo', () {
+      final queue = QueueMappers.publicQueue(publicQueueJson());
+
+      expect(queue.validUntil, isNull);
+      expect(queue.isValidAt(DateTime(2030)), isTrue);
+    });
+
     test('entrada fechada traz o motivo', () {
       final json = publicQueueJson()
         ..['entry'] = {

@@ -1,5 +1,6 @@
 import type { TicketEta } from './eta';
 import { calledTickets, estimateDay, evaluateEntry, waitingTickets, type DayContext, type EntryClosedReason } from './queueDay';
+import { endOfLocalDayMs, toLocal } from './time';
 import type { BarberStatus, QueueDay } from './types';
 
 /**
@@ -40,6 +41,12 @@ export interface PublicQueue {
   readonly waitingCount: number;
   readonly version: number;
   readonly updatedAt: number;
+  /**
+   * Até quando esta projeção vale (epoch ms): o fim do dia no fuso da barbearia.
+   * Ela só é regravada quando um comando roda; sem este prazo, a fila de ontem continuaria
+   * aparecendo como a de hoje até a primeira ação do dia.
+   */
+  readonly validUntil: number;
 }
 
 export function buildPublicQueue(day: QueueDay, ctx: DayContext): PublicQueue {
@@ -76,5 +83,16 @@ export function buildPublicQueue(day: QueueDay, ctx: DayContext): PublicQueue {
     waitingCount: waiting.length,
     version: day.version,
     updatedAt: day.updatedAt,
+    validUntil: validUntilOf(day, ctx),
   };
+}
+
+/**
+ * A projeção vale até o fim do dia do agregado. Os comandos sempre projetam o dia corrente; se um
+ * dia já encerrado for projetado depois (por uma rotina de fechamento, por exemplo), a projeção
+ * nasce vencida, para a fila de ontem nunca ser mostrada como a de hoje.
+ */
+function validUntilOf(day: QueueDay, ctx: DayContext): number {
+  const { timezone } = ctx.shop;
+  return toLocal(ctx.nowMs, timezone).dateKey === day.dateKey ? endOfLocalDayMs(ctx.nowMs, timezone) : ctx.nowMs;
 }

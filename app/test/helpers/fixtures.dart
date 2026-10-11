@@ -4,6 +4,7 @@ import 'dart:ui' show Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proximo/app.dart';
+import 'package:proximo/core/config/clock.dart';
 import 'package:proximo/core/config/provider_retry.dart';
 import 'package:proximo/core/firebase/backend_ports.dart';
 import 'package:proximo/core/firebase/firebase_providers.dart';
@@ -34,11 +35,13 @@ JsonMap shopJson() => {
 
 /// Documento `publicQueues/barbearia-do-ze` exatamente como `buildPublicQueue` produz.
 ///
-/// [barbers] troca os barbeiros em expediente; [servingBarberId] diz quem atende o ticket nº 1.
+/// [barbers] troca os barbeiros em expediente; [servingBarberId] diz quem atende o ticket nº 1;
+/// [validUntil] é o fim do dia da barbearia (sem ele a fila não vence, como nas projeções antigas).
 JsonMap publicQueueJson({
   int waiting = 2,
   List<JsonMap>? barbers,
   String servingBarberId = 'ze',
+  DateTime? validUntil,
 }) => {
   'shopId': 'barbearia-do-ze',
   'shopName': 'Barbearia do Zé',
@@ -72,6 +75,7 @@ JsonMap publicQueueJson({
   'waitingCount': waiting,
   'version': 7,
   'updatedAt': 1791661200000,
+  'validUntil': ?validUntil?.millisecondsSinceEpoch,
 };
 
 /// [DocumentWatcher] em memória: cada caminho guarda o último valor (como o Firestore, que sempre
@@ -109,12 +113,13 @@ final class FakeDocuments {
 ///
 /// Sem [invoke], qualquer chamada a uma callable falha o teste: o repositório da fila depende do
 /// invocador mesmo nas telas que só leem, e o provider real exigiria o Firebase inicializado.
-/// Sem [auth], ninguém está logado.
+/// Sem [auth], ninguém está logado. [clock] fixa que horas são para o app.
 Future<void> pumpProximoApp(
   WidgetTester tester, {
   required DocumentWatcher watch,
   CallableInvoker? invoke,
   AuthRepository? auth,
+  DateTime Function()? clock,
 }) async {
   final fakeAuth = auth ?? FakeAuthRepository();
   if (auth == null) addTearDown((fakeAuth as FakeAuthRepository).dispose);
@@ -128,6 +133,7 @@ Future<void> pumpProximoApp(
           invoke ?? (name, payload) => fail('Callable "$name" chamada sem um invocador falso.'),
         ),
         authRepositoryProvider.overrideWithValue(fakeAuth),
+        if (clock != null) clockProvider.overrideWithValue(clock),
       ],
       child: const ProximoApp(),
     ),

@@ -5,6 +5,7 @@ import {
   alignToOpen,
   dayBounds,
   DomainError,
+  endOfLocalDayMs,
   intervalsFor,
   isValidTimeZone,
   parseHHmm,
@@ -39,6 +40,47 @@ describe('toLocal', () => {
   it('valida fusos IANA', () => {
     assert.equal(isValidTimeZone('America/Sao_Paulo'), true);
     assert.equal(isValidTimeZone('Mars/Olympus_Mons'), false);
+  });
+});
+
+describe('endOfLocalDayMs', () => {
+  it('é a meia-noite seguinte no fuso da barbearia, a qualquer hora do dia', () => {
+    const midnight = at('2026-10-11T00:00');
+    for (const now of [at('2026-10-10T00:00'), at('2026-10-10T10:00'), at('2026-10-10T23:59') + 59_999]) {
+      assert.equal(endOfLocalDayMs(now, 'America/Sao_Paulo'), midnight);
+    }
+  });
+
+  it('o instante devolvido já é o dia seguinte, e o milissegundo anterior ainda é hoje', () => {
+    const end = endOfLocalDayMs(at('2026-10-10T15:30'), 'America/Sao_Paulo');
+    assert.equal(toLocal(end, 'America/Sao_Paulo').dateKey, '2026-10-11');
+    assert.equal(toLocal(end - 1, 'America/Sao_Paulo').dateKey, '2026-10-10');
+  });
+
+  it('segue o fuso, não o UTC', () => {
+    // 22h em São Paulo já é 01h UTC do dia seguinte; o dia da barbearia ainda não acabou.
+    const now = at('2026-10-10T22:00');
+    assert.equal(new Date(now).toISOString().slice(0, 10), '2026-10-11');
+    assert.equal(endOfLocalDayMs(now, 'America/Sao_Paulo'), at('2026-10-11T00:00'));
+  });
+
+  it('acerta dias de 23 e de 25 horas na troca de horário de verão', () => {
+    // Nova York: 8/3/2026 tem 23 h (adianta) e 1/11/2026 tem 25 h (atrasa).
+    const shortDay = Date.parse('2026-03-08T12:00:00-04:00');
+    assert.equal(endOfLocalDayMs(shortDay, 'America/New_York'), Date.parse('2026-03-09T00:00:00-04:00'));
+    const longDay = Date.parse('2026-11-01T12:00:00-05:00');
+    assert.equal(endOfLocalDayMs(longDay, 'America/New_York'), Date.parse('2026-11-02T00:00:00-05:00'));
+    assert.equal(
+      endOfLocalDayMs(Date.parse('2026-11-01T00:30:00-04:00'), 'America/New_York') -
+        Date.parse('2026-11-01T00:00:00-04:00'),
+      25 * 60 * 60 * 1000,
+    );
+  });
+
+  it('acerta quando a meia-noite não existe (São Paulo, 4/11/2018: 00:00 virou 01:00)', () => {
+    const end = endOfLocalDayMs(Date.parse('2018-11-03T12:00:00-03:00'), 'America/Sao_Paulo');
+    assert.equal(end, Date.parse('2018-11-04T03:00:00Z'));
+    assert.equal(toLocal(end, 'America/Sao_Paulo').dateKey, '2018-11-04');
   });
 });
 
