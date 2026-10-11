@@ -4,6 +4,7 @@ import 'package:proximo/features/barber_console/presentation/console_page.dart';
 import 'package:proximo/features/home/presentation/home_page.dart';
 import 'package:proximo/features/home/presentation/not_found_page.dart';
 import 'package:proximo/features/queue/presentation/join_queue_page.dart';
+import 'package:proximo/features/shop/domain/shop_slug.dart';
 
 /// Rotas nomeadas do app (evita strings soltas espalhadas pelas telas).
 abstract final class AppRoutes {
@@ -11,9 +12,6 @@ abstract final class AppRoutes {
   static const joinQueue = 'join-queue';
   static const console = 'console';
 }
-
-/// Slug de barbearia válido (mesma regra do backend em `functions/src/domain/shop.ts`).
-final _slugPattern = RegExp(r'^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$');
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
@@ -30,7 +28,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/b/:slug',
         name: AppRoutes.joinQueue,
         redirect: (context, state) =>
-            _slugPattern.hasMatch(state.pathParameters['slug'] ?? '') ? null : '/not-found',
+            isValidShopSlug(state.pathParameters['slug'] ?? '') ? null : '/not-found',
         builder: (context, state) => JoinQueuePage(slug: state.pathParameters['slug']!),
       ),
       GoRoute(

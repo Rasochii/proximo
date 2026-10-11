@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'helpers/fixtures.dart';
 
@@ -28,11 +29,10 @@ void main() {
       expect(find.text('2 pessoas esperando'), findsOneWidget);
     });
 
-    testWidgets('código inválido cai na página de não encontrado', (tester) async {
+    testWidgets('endereço de fila inválido cai na página de não encontrado', (tester) async {
       await pumpProximoApp(tester, watch: FakeDocuments().watch);
 
-      await tester.enterText(find.byType(TextField), 'código inválido!');
-      await tester.tap(find.text('Ver fila'));
+      GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/b/Inválido!');
       await tester.pumpAndSettle();
 
       expect(find.text('Página não encontrada'), findsOneWidget);

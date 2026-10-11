@@ -3,6 +3,8 @@
 > Fila virtual para barbearias. Projeto de portfólio com arquitetura pronta para uso real.
 > Stack: **Flutter + Riverpod 3 + go_router** no app, **Firebase** (Auth, Firestore, Cloud Functions, FCM, App Check, Hosting) no backend.
 
+**Caso de uso principal:** o cliente vê o movimento da barbearia e entra na fila **sem sair de casa**, e só se desloca quando a vez está chegando. Quem depende de transporte pago não pode chegar, encontrar a barbearia cheia e ter de voltar depois. O QR Code da porta é um segundo caminho de entrada, não o único. Disso saem três necessidades além da fila em si: achar a barbearia de longe (F4 e F5), saber a hora de sair (F7) e lidar com quem entrou de longe e não apareceu (o "Não veio" do barbeiro).
+
 ## 1. Decisões fechadas
 
 | # | Decisão | Por quê |
@@ -96,8 +98,11 @@ Legenda de tamanho: **P** ≈ 1–3 dias · **M** ≈ 1 semana · **G** ≈ 2 se
 **Pronto quando:** fluxo completo sem tocar no Firestore manualmente; testes de widget do console; golden tests das telas principais.
 
 ### F4 — Experiência do cliente · M
-- Rota `/b/:slug` (funciona no Flutter Web para QR Code).
-- Entrar só com nome + serviço; mostrar ETA **antes** de entrar.
+- Rota `/b/:slug` (funciona no Flutter Web para QR Code), com URL por caminho, sem `#`. O link do QR Code leva direto à fila; com o app instalado, abre no app (App Links no Android, Universal Links no iOS). O Firebase Dynamic Links foi descontinuado e não é usado.
+- Entrar só com nome + serviço; mostrar ETA **antes** de entrar. Entrar na fila nunca exige cadastro.
+- **Conta de cliente opcional:** depois de entrar, o cliente pode criar uma conta (e-mail ou Google) mantendo o mesmo usuário (a conta anônima é promovida, o ticket continua), para guardar o nome e acompanhar a fila em outro aparelho.
+- **Minhas barbearias:** o app lembra as barbearias em que a pessoa já esteve (guardadas no aparelho, sem exigir conta; com conta, acompanham a pessoa em outros aparelhos). A tela inicial passa a mostrá-las com o movimento atual, para entrar na fila de casa com um toque.
+- **Convite para instalar o app** na versão web da fila, num aviso dispensável. Enquanto não houver app publicado nas lojas, o convite é "adicionar à tela inicial" (PWA).
 - Tela de posição em tempo real: posição em destaque, faixa de ETA, linha do tempo de status, "Sair da fila".
 - Estados: entrada fechada, fora do horário, fila vazia, "é sua vez!".
 - **Excluir meus dados** (LGPD + exigência das lojas): callable que anonimiza tickets e apaga a conta anônima.
@@ -106,9 +111,12 @@ Legenda de tamanho: **P** ≈ 1–3 dias · **M** ≈ 1 semana · **G** ≈ 2 se
 **Pronto quando:** dois navegadores (cliente e barbeiro) se atualizam em tempo real; acessibilidade validada (Semantics, contraste, fonte grande).
 
 ### F5 — Cadastro da barbearia · M
+- **Criar conta do dono** (e-mail e senha) a partir da tela de login. Conta nova não tem barbearia e cai no aviso "conta sem barbearia", que ganha a ação "Criar minha barbearia".
 - Onboarding do dono em 3 passos: dados → horários semanais com intervalos → serviços.
-- Callable `upsertShop` com validação de horário no domínio (já existe em F1).
-- Gerar QR Code/cartaz para impressão; slug único.
+- Callable `upsertShop` com validação de horário no domínio (já existe em F1). Ao criar, grava a barbearia, o dono em `members/{uid}` e o vínculo `staff/{uid}` na mesma transação (ADR 0007).
+- **Endereço e localização** no cadastro, para a barbearia poder ser encontrada.
+- **Encontrar barbearias:** busca por nome e lista das barbearias por perto (geolocalização, com permissão pedida só quando a pessoa usa a função). Depende do endereço acima; a localização do cliente não é guardada no servidor.
+- Gerar QR Code/cartaz para impressão; slug único. O cartaz traz o QR Code e, embaixo, o código da barbearia (o slug) para quem preferir digitar no site.
 
 **Pronto quando:** uma barbearia nova é criada pelo app e recebe clientes sem seed.
 

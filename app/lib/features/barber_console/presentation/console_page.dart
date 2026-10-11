@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:proximo/core/router/app_router.dart';
 import 'package:proximo/core/theme/app_theme.dart';
+import 'package:proximo/core/widgets/site_shell.dart';
 import 'package:proximo/features/auth/domain/auth_repository.dart';
 import 'package:proximo/features/auth/domain/staff_membership.dart';
 import 'package:proximo/features/auth/presentation/auth_providers.dart';
@@ -98,6 +99,7 @@ class _ShopConsole extends ConsumerWidget {
 
     return _ConsoleScaffold(
       title: shop.value?.name,
+      brandLeadsHome: false,
       // No console em uso, sair fica a dois toques: um esbarrão não derruba a sessão no balcão.
       accountAction: _AccountMenu(onSignOut: onSignOut),
       child: Center(
@@ -111,7 +113,12 @@ class _ShopConsole extends ConsumerWidget {
 }
 
 class _ConsoleScaffold extends StatelessWidget {
-  const _ConsoleScaffold({required this.child, this.title, this.accountAction});
+  const _ConsoleScaffold({
+    required this.child,
+    this.title,
+    this.accountAction,
+    this.brandLeadsHome = true,
+  });
 
   final Widget child;
 
@@ -121,15 +128,34 @@ class _ConsoleScaffold extends StatelessWidget {
   /// Botão ou menu de conta na barra (ausente quando ninguém da equipe está logado).
   final Widget? accountAction;
 
+  /// No console em uso a marca do cabeçalho não é um link: um esbarrão não tira o barbeiro da tela.
+  final bool brandLeadsHome;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final title = this.title ?? l10n.consoleTitle;
+
+    final wide = Breakpoints.isWide(context);
+
+    // Telas largas trocam a barra do app pelo cabeçalho do site. O conteúdo fica sempre no mesmo
+    // lugar da árvore (a chave garante), para um formulário não perder o que foi digitado quando
+    // a janela cruza o breakpoint.
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title ?? l10n.consoleTitle),
-        actions: [?accountAction],
+      appBar: wide ? null : AppBar(title: Text(title), actions: [?accountAction]),
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (wide)
+              SiteHeader(
+                title: title,
+                actions: [?accountAction],
+                brandLeadsHome: brandLeadsHome,
+              ),
+            Expanded(key: const ValueKey('console-body'), child: child),
+          ],
+        ),
       ),
-      body: SafeArea(child: child),
     );
   }
 }
