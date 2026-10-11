@@ -59,6 +59,8 @@ abstract final class AppTheme {
           textStyle: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
       ),
+      // Avisos flutuam acima da barra de ação do console, em vez de cobrir o botão principal.
+      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
       cardTheme: CardThemeData(
         elevation: 0,
         color: scheme.surfaceContainerLow,
@@ -84,6 +86,9 @@ abstract final class Insets {
 
   /// Altura mínima de um alvo de toque (acessibilidade).
   static const touchTarget = 48.0;
+
+  /// Altura do botão principal do console ("Próximo!"): grande o bastante para acertar sem olhar.
+  static const primaryActionHeight = 88.0;
 
   /// Largura máxima do conteúdo em coluna única (celular, formulários).
   static const maxContentWidth = 560.0;

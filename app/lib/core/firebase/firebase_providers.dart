@@ -27,7 +27,9 @@ final callableInvokerProvider = Provider<CallableInvoker>((ref) {
   final functions = ref.watch(functionsProvider);
   return (name, payload) async {
     try {
-      final result = await functions.httpsCallable(name).call<Object?>(payload);
+      final result = await functions
+          .httpsCallable(name, options: HttpsCallableOptions(timeout: _callableTimeout))
+          .call<Object?>(payload);
       return normalizeJson(result.data);
     } on FirebaseFunctionsException catch (error) {
       throw CallableException(
@@ -40,3 +42,8 @@ final callableInvokerProvider = Provider<CallableInvoker>((ref) {
 });
 
 final requestIdGeneratorProvider = Provider<RequestIdGenerator>((ref) => uuidV4RequestId);
+
+/// Limite de espera de uma callable. O padrão do SDK é mais de um minuto, tempo demais para o
+/// barbeiro olhar um botão travado; estourado o limite, o pedido é repetido com o mesmo
+/// `requestId` (veja `QueueFunctionsApi`).
+const _callableTimeout = Duration(seconds: 15);

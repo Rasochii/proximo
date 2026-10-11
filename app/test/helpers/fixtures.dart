@@ -37,10 +37,13 @@ JsonMap shopJson() => {
 ///
 /// [barbers] troca os barbeiros em expediente; [servingBarberId] diz quem atende o ticket nº 1;
 /// [validUntil] é o fim do dia da barbearia (sem ele a fila não vence, como nas projeções antigas).
+/// [nowServing] troca por inteiro quem está em atendimento; [version] é a versão do agregado.
 JsonMap publicQueueJson({
   int waiting = 2,
   List<JsonMap>? barbers,
   String servingBarberId = 'ze',
+  List<JsonMap>? nowServing,
+  int version = 7,
   DateTime? validUntil,
 }) => {
   'shopId': 'barbearia-do-ze',
@@ -57,9 +60,11 @@ JsonMap publicQueueJson({
       [
         {'id': 'ze', 'displayName': 'Zé', 'status': 'available', 'servingNumber': 1},
       ],
-  'nowServing': [
-    {'ticketId': 't1', 'number': 1, 'label': 'Ana S.', 'barberId': servingBarberId},
-  ],
+  'nowServing':
+      nowServing ??
+      [
+        {'ticketId': 't1', 'number': 1, 'label': 'Ana S.', 'barberId': servingBarberId},
+      ],
   'waiting': [
     for (var i = 0; i < waiting; i++)
       {
@@ -73,7 +78,7 @@ JsonMap publicQueueJson({
       },
   ],
   'waitingCount': waiting,
-  'version': 7,
+  'version': version,
   'updatedAt': 1791661200000,
   'validUntil': ?validUntil?.millisecondsSinceEpoch,
 };

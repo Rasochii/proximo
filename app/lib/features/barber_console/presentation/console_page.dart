@@ -96,12 +96,18 @@ class _ShopConsole extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final shop = ref.watch(shopProvider(shopId));
 
-    return _ConsoleScaffold(
-      title: shop.value?.name,
-      brandLeadsHome: false,
-      // No console em uso, sair fica a dois toques: um esbarrão não derruba a sessão no balcão.
-      accountAction: _AccountMenu(onSignOut: onSignOut),
-      child: ShopConsoleView(shopId: shopId, barberId: barberId),
+    // Os avisos do console (o "Desfazer") vivem neste ScaffoldMessenger, e não no do app: assim
+    // saem da tela junto com o console, seja qual for a saída (sair da conta, trocar de rota,
+    // perder o vínculo), e não sobram na tela de login de outra pessoa.
+    return ScaffoldMessenger(
+      child: _ConsoleScaffold(
+        title: shop.value?.name,
+        brandLeadsHome: false,
+        // No console em uso, sair fica a dois toques: um esbarrão não derruba a sessão no balcão.
+        accountAction: _AccountMenu(onSignOut: onSignOut),
+        bottomBar: ShopConsoleActionBar(shopId: shopId, barberId: barberId),
+        child: ShopConsoleView(shopId: shopId, barberId: barberId),
+      ),
     );
   }
 }
@@ -111,6 +117,7 @@ class _ConsoleScaffold extends StatelessWidget {
     required this.child,
     this.title,
     this.accountAction,
+    this.bottomBar,
     this.brandLeadsHome = true,
   });
 
@@ -121,6 +128,9 @@ class _ConsoleScaffold extends StatelessWidget {
 
   /// Botão ou menu de conta na barra (ausente quando ninguém da equipe está logado).
   final Widget? accountAction;
+
+  /// Barra fixa na parte de baixo (o "Próximo!"). Os avisos flutuam acima dela.
+  final Widget? bottomBar;
 
   /// No console em uso a marca do cabeçalho não é um link: um esbarrão não tira o barbeiro da tela.
   final bool brandLeadsHome;
@@ -137,6 +147,7 @@ class _ConsoleScaffold extends StatelessWidget {
     // a janela cruza o breakpoint.
     return Scaffold(
       appBar: wide ? null : AppBar(title: Text(title), actions: [?accountAction]),
+      bottomNavigationBar: bottomBar,
       body: SafeArea(
         child: Column(
           children: [
