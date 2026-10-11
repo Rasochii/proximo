@@ -305,4 +305,39 @@ void main() {
       expect(find.text('Entrar como barbeiro'), findsOneWidget);
     });
   });
+
+  group('layout de site (tela larga)', () {
+    testWidgets('console logado usa o cabeçalho do site, sem link na marca', (tester) async {
+      useWideScreen(tester);
+      await openConsole(tester, seededDocs(), authWith(signedInAs: barberZe));
+
+      expect(find.text('Barbearia do Zé'), findsOneWidget);
+      expect(find.byTooltip('Conta'), findsOneWidget);
+      // Um esbarrão na marca não pode tirar o barbeiro do console.
+      expect(find.text('Próximo!'), findsOneWidget);
+      expect(find.byTooltip('Voltar ao início'), findsNothing);
+    });
+
+    testWidgets('estreitar a janela não apaga o login nem oferece salvar a senha', (tester) async {
+      useWideScreen(tester);
+      await openConsole(tester, seededDocs(), authWith());
+      await fillLogin(tester, password: 'pela-metade');
+
+      tester.view.physicalSize = const Size(600, 800);
+      await tester.pumpAndSettle();
+
+      EditableText field(String label) => tester.widget<EditableText>(
+        find.descendant(
+          of: find.widgetWithText(TextFormField, label),
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(field('E-mail').controller.text, _email);
+      expect(field('Senha').controller.text, 'pela-metade');
+      expect(
+        tester.testTextInput.log.where((call) => call.method == 'TextInput.finishAutofillContext'),
+        isEmpty,
+      );
+    });
+  });
 }

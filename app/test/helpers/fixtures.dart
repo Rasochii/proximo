@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Size;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -124,4 +125,12 @@ Future<void> pumpProximoApp(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Simula uma janela larga de navegador, em que o app usa o layout de site.
+/// Sem isto os testes rodam em 800×600, que cai no layout de celular.
+void useWideScreen(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1280, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
 }
