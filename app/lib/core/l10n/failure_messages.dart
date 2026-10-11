@@ -8,6 +8,7 @@ extension FailureMessages on AppLocalizations {
     QueueRuleFailure(:final code) => queueErrorMessage(code),
     NetworkFailure() => networkError,
     PermissionFailure() || UnauthenticatedFailure() => errorPermission,
+    AccountDisabledFailure() => errorAccountDisabled,
     NotFoundFailure() => shopNotFound,
     UnexpectedFailure() => genericError,
   };
