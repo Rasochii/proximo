@@ -144,6 +144,21 @@ void main() {
     await tester.pump(ShiftController.settleDelay);
   });
 
+  testWidgets('se o pedido estourar com um erro de programação, a tela não fica presa', (
+    tester,
+  ) async {
+    arrange();
+    // Um Error (e não uma Exception) atravessa a camada de dados: é bug, não falha esperada.
+    backend.handler = (name, payload) => throw StateError('bug');
+
+    final request = expectLater(controller().setStatus(BarberStatus.paused), throwsStateError);
+    await tester.pump();
+    await request;
+
+    expect(state().busy, isFalse);
+    expect(state().failure, isA<UnexpectedFailure>());
+  });
+
   testWidgets('descartado no meio do pedido, não mexe mais no estado nem deixa temporizador', (
     tester,
   ) async {

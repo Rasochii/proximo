@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 import 'package:proximo/core/error/failure.dart';
+import 'package:proximo/core/result/result.dart';
 import 'package:proximo/features/queue/domain/public_queue.dart';
 import 'package:proximo/features/queue/domain/queue_types.dart';
 import 'package:proximo/features/queue/presentation/queue_providers.dart';
@@ -74,9 +75,16 @@ class ShiftController extends Notifier<ShiftState> {
   Future<void> setStatus(BarberStatus status) async {
     if (state.busy) return;
     state = ShiftState(requested: status);
-    final result = await ref
-        .read(barberQueueRepositoryProvider)
-        .setBarberStatus(shopId: key.shopId, status: status);
+    Result<void>? result;
+    try {
+      result = await ref
+          .read(barberQueueRepositoryProvider)
+          .setBarberStatus(shopId: key.shopId, status: status);
+    } finally {
+      // O repositório devolve as falhas esperadas como Result. Se ainda assim algo estourar (um
+      // erro de programação, por exemplo), o erro segue para os logs, mas a tela não fica presa.
+      if (result == null && ref.mounted) state = const ShiftState(failure: UnexpectedFailure());
+    }
     if (!ref.mounted) return;
 
     final failure = result.failureOrNull;
