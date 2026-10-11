@@ -66,6 +66,11 @@ class _LoginViewState extends ConsumerState<LoginView> {
           key: _formKey,
           autovalidateMode: _autovalidate,
           child: AutofillGroup(
+            // O grupo encerra o preenchimento automático ao sair de cena, e é aí que o gerenciador
+            // de senhas oferece salvar. Com um erro de login na tela, sair não salva a senha errada.
+            onDisposeAction: failure == null
+                ? AutofillContextAction.commit
+                : AutofillContextAction.cancel,
             child: ListView(
               padding: const EdgeInsets.all(Insets.lg),
               shrinkWrap: true,

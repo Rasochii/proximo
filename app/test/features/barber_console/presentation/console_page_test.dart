@@ -101,6 +101,34 @@ void main() {
       expect(find.text('Sem conexão com o servidor. Verifique a internet.'), findsOneWidget);
     });
 
+    /// Argumento `shouldSave` de cada encerramento do preenchimento automático.
+    List<Object?> autofillSaves(WidgetTester tester) => [
+      for (final call in tester.testTextInput.log)
+        if (call.method == 'TextInput.finishAutofillContext') call.arguments,
+    ];
+
+    testWidgets('login certo oferece salvar a senha no gerenciador', (tester) async {
+      await openConsole(tester, seededDocs(), authWith());
+
+      await fillLogin(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+
+      expect(autofillSaves(tester), [true]);
+    });
+
+    testWidgets('senha errada não é oferecida para salvar ao sair da tela', (tester) async {
+      await openConsole(tester, seededDocs(), authWith());
+
+      await fillLogin(tester, password: 'errada');
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Voltar ao início'));
+      await tester.pumpAndSettle();
+
+      expect(autofillSaves(tester), [false]);
+    });
+
     testWidgets('conta desativada orienta a falar com o dono', (tester) async {
       final auth = authWith()..nextSignInFailure = const AccountDisabledFailure();
       await openConsole(tester, seededDocs(), auth);
