@@ -60,7 +60,16 @@ cd functions && npm run seed     # 2. barbearia demo + barbeiros ze@proximo.dev 
 cd app && flutter run -d chrome  # 3. app (no emulador Android o host 10.0.2.2 é usado automaticamente)
 ```
 
-Em um celular físico: `flutter run --dart-define=EMULATOR_HOST=<IP-do-seu-PC>`.
+Em um celular Android físico, ligado por USB com a depuração ativada, os emuladores chegam ao aparelho pelo cabo:
+
+```sh
+adb reverse tcp:8080 tcp:8080   # Firestore
+adb reverse tcp:9099 tcp:9099   # Auth
+adb reverse tcp:5001 tcp:5001   # Functions
+cd app && flutter run -d <id-do-aparelho> --dart-define=EMULATOR_HOST=127.0.0.1
+```
+
+O redirecionamento se perde ao desconectar o cabo. Os emuladores só escutam em `127.0.0.1`, então abrir pelo Wi-Fi com o IP do PC não funciona sem mudar o `firebase.json`.
 
 ## Roadmap
 

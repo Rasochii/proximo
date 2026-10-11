@@ -30,11 +30,14 @@ abstract final class FirebaseInitializer {
 
   static Future<void> _connectEmulators() async {
     final host = _emulatorHost;
-    FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
+    // `automaticHostMapping: false`: no Android os plugins trocam `localhost`/`127.0.0.1` por
+    // `10.0.2.2`, que só existe no emulador. Num celular físico ligado por USB (`adb reverse`)
+    // o host certo é mesmo `127.0.0.1`; quem escolhe o host é [_emulatorHost].
+    FirebaseFirestore.instance.useFirestoreEmulator(host, 8080, automaticHostMapping: false);
     FirebaseFunctions.instanceFor(
       region: AppConfig.functionsRegion,
-    ).useFunctionsEmulator(host, 5001);
-    await FirebaseAuth.instance.useAuthEmulator(host, 9099);
+    ).useFunctionsEmulator(host, 5001, automaticHostMapping: false);
+    await FirebaseAuth.instance.useAuthEmulator(host, 9099, automaticHostMapping: false);
   }
 
   static String get _emulatorHost {

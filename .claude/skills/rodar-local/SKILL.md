@@ -31,7 +31,7 @@ cd app && flutter run -d chrome
 ```
 
 - Emulador Android: o app usa `10.0.2.2` automaticamente.
-- Celular físico (mesma rede Wi-Fi): `flutter run --dart-define=EMULATOR_HOST=<IP-do-PC>`; libere as portas 8080, 5001 e 9099 no Firewall do Windows.
+- Celular Android físico (USB, depuração ativada): `adb reverse tcp:8080 tcp:8080`, o mesmo para `9099` e `5001`, e depois `flutter run -d <id> --dart-define=EMULATOR_HOST=127.0.0.1`. O redirecionamento se perde ao desconectar o cabo. Pelo Wi-Fi com o IP do PC não funciona: os emuladores só escutam em `127.0.0.1`.
 - Mudou código em `functions/src`? `npm run serve` faz o build só ao iniciar — rode `npm run build:watch` num quarto terminal para recarregar.
 
 ## Testes que dependem dos emuladores
