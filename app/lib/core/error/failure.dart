@@ -42,6 +42,11 @@ final class PermissionFailure extends Failure {
   const PermissionFailure();
 }
 
+/// Conta da equipe desativada: tentar de novo não resolve, só o dono da barbearia.
+final class AccountDisabledFailure extends Failure {
+  const AccountDisabledFailure();
+}
+
 /// Recurso inexistente (ex.: barbearia não encontrada).
 final class NotFoundFailure extends Failure {
   const NotFoundFailure();

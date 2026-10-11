@@ -78,6 +78,7 @@
   "errorBarberNotAvailable": "Seu expediente está pausado.",
   "errorFinishCurrentFirst": "Finalize o atendimento atual primeiro.",
   "errorPermission": "Você não tem permissão para fazer isso.",
+  "errorAccountDisabled": "Esta conta está desativada. Fale com o dono da barbearia.",
   "loginTitle": "Entrar como barbeiro",
   "loginSubtitle": "Use o e-mail e a senha da sua conta da barbearia.",
   "loginEmailLabel": "E-mail",

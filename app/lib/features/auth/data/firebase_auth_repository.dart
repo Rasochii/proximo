@@ -51,6 +51,7 @@ final class FirebaseAuthRepository implements AuthRepository {
     'network-request-failed' => const NetworkFailure(),
     // Bloqueio temporário por excesso de tentativas: insistir só prolonga a espera.
     'too-many-requests' => const QueueRuleFailure(QueueErrorCode.rateLimited),
+    'user-disabled' => const AccountDisabledFailure(),
     'invalid-credential' ||
     'wrong-password' ||
     'user-not-found' ||

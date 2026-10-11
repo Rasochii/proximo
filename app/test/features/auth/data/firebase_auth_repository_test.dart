@@ -34,6 +34,13 @@ void main() {
       );
     });
 
+    test('conta desativada tem falha própria, que não sugere tentar de novo', () {
+      expect(
+        FirebaseAuthRepository.failureFromAuthCode('user-disabled'),
+        const AccountDisabledFailure(),
+      );
+    });
+
     test('código desconhecido vira falha inesperada', () {
       expect(
         FirebaseAuthRepository.failureFromAuthCode('internal-error'),

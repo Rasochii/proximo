@@ -101,6 +101,20 @@ void main() {
       expect(find.text('Sem conexão com o servidor. Verifique a internet.'), findsOneWidget);
     });
 
+    testWidgets('conta desativada orienta a falar com o dono', (tester) async {
+      final auth = authWith()..nextSignInFailure = const AccountDisabledFailure();
+      await openConsole(tester, seededDocs(), auth);
+
+      await fillLogin(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Esta conta está desativada. Fale com o dono da barbearia.'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('campos vazios são apontados e o login não é chamado', (tester) async {
       final auth = authWith();
       await openConsole(tester, seededDocs(), auth);
