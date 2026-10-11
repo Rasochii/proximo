@@ -7,13 +7,100 @@ import '../../../helpers/fixtures.dart';
 const _shop = 'shops/barbearia-do-ze';
 const _queue = 'publicQueues/barbearia-do-ze';
 
-Future<void> openShop(WidgetTester tester, FakeDocuments docs) async {
-  await pumpProximoApp(tester, watch: docs.watch);
+Future<void> openShop(
+  WidgetTester tester,
+  FakeDocuments docs, {
+  DateTime Function()? clock,
+}) async {
+  await pumpProximoApp(tester, watch: docs.watch, clock: clock);
   GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/b/barbearia-do-ze');
   await tester.pumpAndSettle();
 }
 
 void main() {
+  group('validade da fila (virada do dia)', () {
+    // A fila vale até a meia-noite da barbearia; o servidor grava esse instante em `validUntil`.
+    final midnight = DateTime(2026, 10, 11);
+
+    testWidgets('a fila de ontem é tratada como ainda não aberta hoje', (tester) async {
+      final docs = FakeDocuments({
+        _shop: shopJson(),
+        _queue: publicQueueJson(validUntil: midnight),
+      });
+      addTearDown(docs.dispose);
+      await openShop(tester, docs, clock: () => DateTime(2026, 10, 11, 8));
+
+      expect(find.text('A fila de hoje ainda não foi aberta.'), findsOneWidget);
+      expect(find.text('2 pessoas esperando'), findsNothing);
+      expect(find.text('Lucas M.'), findsNothing);
+    });
+
+    testWidgets('antes do prazo a fila aparece normalmente', (tester) async {
+      final docs = FakeDocuments({
+        _shop: shopJson(),
+        _queue: publicQueueJson(validUntil: midnight),
+      });
+      addTearDown(docs.dispose);
+      await openShop(tester, docs, clock: () => DateTime(2026, 10, 10, 15));
+
+      expect(find.text('2 pessoas esperando'), findsOneWidget);
+    });
+
+    testWidgets('se o dia vira com a tela aberta, a fila vencida some sozinha', (tester) async {
+      var now = DateTime(2026, 10, 10, 23, 59);
+      final docs = FakeDocuments({
+        _shop: shopJson(),
+        _queue: publicQueueJson(validUntil: midnight),
+      });
+      addTearDown(docs.dispose);
+      await openShop(tester, docs, clock: () => now);
+      expect(find.text('2 pessoas esperando'), findsOneWidget);
+
+      now = DateTime(2026, 10, 11, 0, 0, 1);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A fila de hoje ainda não foi aberta.'), findsOneWidget);
+      expect(find.text('2 pessoas esperando'), findsNothing);
+    });
+
+    testWidgets('aparelho que dormiu a noite toda percebe a virada em até um minuto', (
+      tester,
+    ) async {
+      // O temporizador não conta o tempo suspenso: às 15h faltavam 9 horas para o prazo, mas o
+      // relógio do aparelho já diz 8h do dia seguinte quando ele acorda.
+      var now = DateTime(2026, 10, 10, 15);
+      final docs = FakeDocuments({
+        _shop: shopJson(),
+        _queue: publicQueueJson(validUntil: midnight),
+      });
+      addTearDown(docs.dispose);
+      await openShop(tester, docs, clock: () => now);
+      expect(find.text('2 pessoas esperando'), findsOneWidget);
+
+      now = DateTime(2026, 10, 11, 8);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A fila de hoje ainda não foi aberta.'), findsOneWidget);
+    });
+
+    testWidgets('uma fila nova, do dia seguinte, volta a aparecer', (tester) async {
+      final docs = FakeDocuments({
+        _shop: shopJson(),
+        _queue: publicQueueJson(validUntil: midnight),
+      });
+      addTearDown(docs.dispose);
+      await openShop(tester, docs, clock: () => DateTime(2026, 10, 11, 8));
+      expect(find.text('A fila de hoje ainda não foi aberta.'), findsOneWidget);
+
+      docs.emit(_queue, publicQueueJson(waiting: 1, validUntil: DateTime(2026, 10, 12)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 pessoa esperando'), findsOneWidget);
+    });
+  });
+
   testWidgets('mostra a fila e atualiza em tempo real quando alguém entra', (tester) async {
     final docs = FakeDocuments({_shop: shopJson(), _queue: publicQueueJson(waiting: 1)});
     addTearDown(docs.dispose);
