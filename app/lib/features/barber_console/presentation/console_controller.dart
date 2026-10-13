@@ -31,6 +31,11 @@ enum ConsoleAction {
   /// O cliente chamado não apareceu.
   noShow,
   undo,
+
+  /// Tira da fila alguém que ainda espera.
+  removeTicket,
+  closeEntries,
+  openEntries,
 }
 
 /// Um "Próximo!", "Finalizar" ou "Não veio" que o servidor aceitou e que ainda pode ser desfeito.
@@ -268,6 +273,31 @@ class ConsoleController extends Notifier<ConsoleState> {
   /// Quem a tela mostra na cadeira deste barbeiro. Vai junto com cada avanço: se o servidor vir
   /// outra pessoa lá, recusa em vez de finalizar quem o barbeiro não está vendo.
   String? get _servingTicketId => _queue?.servedBy(key.barberId)?.ticketId;
+
+  /// Tira da fila alguém que ainda espera (desistiu, entrada de brincadeira). O servidor não
+  /// desfaz isso: a tela pede confirmação antes de chamar.
+  Future<void> removeTicket(String ticketId) {
+    if (!state.busy) _removingTicketId = ticketId;
+    return _removeTicket(ticketId);
+  }
+
+  /// O ticket do último pedido de remoção; a tela marca essa linha enquanto o pedido está em
+  /// aberto (`pending == ConsoleAction.removeTicket`).
+  String? get removingTicketId => _removingTicketId;
+  String? _removingTicketId;
+
+  Future<void> _removeTicket(String ticketId) => _run<void>(
+    ConsoleAction.removeTicket,
+    () => _repository.removeTicket(shopId: key.shopId, ticketId: ticketId),
+    confirmed: (queue, _) => queue?.waitingTicket(ticketId) == null,
+  );
+
+  /// Fecha ou reabre a entrada de novos clientes. Quem já está na fila continua sendo atendido.
+  Future<void> setAcceptingEntries({required bool accepting}) => _run<void>(
+    accepting ? ConsoleAction.openEntries : ConsoleAction.closeEntries,
+    () => _repository.setAcceptingEntries(shopId: key.shopId, accepting: accepting),
+    confirmed: (queue, _) => queue != null && queue.entriesClosedByStaff == !accepting,
+  );
 
   Future<void> _setStatus(ConsoleAction action, BarberStatus status) => _run<void>(
     action,

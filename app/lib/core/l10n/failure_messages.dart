@@ -29,11 +29,11 @@ extension FailureMessages on AppLocalizations {
     QueueErrorCode.finishCurrentFirst => errorFinishCurrentFirst,
     QueueErrorCode.servingChanged => errorServingChanged,
     QueueErrorCode.notTicketOwner => errorPermission,
+    // A pessoa foi chamada ou saiu da fila um instante antes: é rotina numa fila ao vivo.
+    QueueErrorCode.ticketNotFound || QueueErrorCode.invalidTicketState => errorTicketGone,
     QueueErrorCode.invalidArgument ||
     QueueErrorCode.invalidService ||
     QueueErrorCode.invalidSchedule ||
-    QueueErrorCode.ticketNotFound ||
-    QueueErrorCode.invalidTicketState ||
     QueueErrorCode.barberNotFound ||
     QueueErrorCode.nothingToFinish ||
     QueueErrorCode.nothingToUndo ||

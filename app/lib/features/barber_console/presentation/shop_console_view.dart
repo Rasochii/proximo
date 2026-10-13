@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -158,6 +160,8 @@ class _ConsoleBody extends StatelessWidget {
               consoleKey: consoleKey,
               status: queue?.statusOf(barberId) ?? BarberStatus.off,
               serving: queue?.servedBy(barberId),
+              entriesClosed: queue?.entriesClosedByStaff ?? false,
+              hasQueue: queue != null,
             ),
             if (servedByOthers.isNotEmpty) ...[
               const SizedBox(height: Insets.lg),
@@ -167,8 +171,17 @@ class _ConsoleBody extends StatelessWidget {
               const SizedBox(height: Insets.lg),
               // O título já diz quantos esperam ("Ninguém esperando", "3 pessoas esperando").
               // As linhas ficam soltas no ListView para serem construídas sob demanda.
+              if (queue.entriesClosedByStaff) ...[
+                _EntriesClosedNotice(consoleKey: consoleKey),
+                const SizedBox(height: Insets.lg),
+              ],
               QueueSectionTitle(l10n.queueWaitingCount(queue.waitingCount)),
-              for (final ticket in queue.waiting) WaitingTicketTile(ticket: ticket),
+              for (final ticket in queue.waiting)
+                _RemovableTicket(
+                  key: ValueKey(ticket.ticketId),
+                  consoleKey: consoleKey,
+                  ticket: ticket,
+                ),
             ],
           ],
         ),
@@ -184,10 +197,22 @@ const _mainActionKey = ValueKey('shift-main-action');
 ///
 /// Cada situação tem cor, ícone e texto próprios, para ser reconhecida de relance do balcão.
 class _ShiftCard extends ConsumerWidget {
-  const _ShiftCard({required this.consoleKey, required this.status, required this.serving});
+  const _ShiftCard({
+    required this.consoleKey,
+    required this.status,
+    required this.serving,
+    required this.entriesClosed,
+    required this.hasQueue,
+  });
 
   final ConsoleKey consoleKey;
   final BarberStatus status;
+
+  /// A fila de hoje já existe (alguém iniciou o expediente ou entrou nela).
+  final bool hasQueue;
+
+  /// A equipe fechou a entrada de novos clientes.
+  final bool entriesClosed;
 
   /// Quem este barbeiro está atendendo agora, se houver.
   final ServingTicket? serving;
@@ -238,6 +263,13 @@ class _ShiftCard extends ConsumerWidget {
       ConsoleAction.endShift => l10n.consoleShiftEnding,
       _ => null,
     };
+    // Estas não trocam o texto do botão de expediente; só acendem a barra de progresso.
+    final otherPending = switch (console.pending) {
+      ConsoleAction.closeEntries => l10n.consoleClosingEntries,
+      ConsoleAction.openEntries => l10n.consoleOpeningEntries,
+      ConsoleAction.removeTicket => l10n.consoleRemoving,
+      _ => null,
+    };
     final (actionLabel, action) = switch (status) {
       BarberStatus.off => (l10n.consoleShiftStartAction, controller.startShift),
       BarberStatus.available => (l10n.consoleShiftPauseAction, controller.pause),
@@ -256,9 +288,9 @@ class _ShiftCard extends ConsumerWidget {
           // Reserva a altura da barra para o cartão não pular quando um pedido começa ou termina.
           SizedBox(
             height: Insets.xs,
-            child: pendingLabel == null
+            child: (pendingLabel ?? otherPending) == null
                 ? null
-                : LinearProgressIndicator(semanticsLabel: pendingLabel),
+                : LinearProgressIndicator(semanticsLabel: pendingLabel ?? otherPending),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.sm, Insets.sm, Insets.lg),
@@ -283,16 +315,30 @@ class _ShiftCard extends ConsumerWidget {
                     ),
                     // Encerrar tira o barbeiro da fila pública: fica a dois toques, como o "Sair",
                     // para um esbarrão no balcão não encerrar o expediente.
-                    if (status != BarberStatus.off)
+                    // Fechar a entrada vale também fora do expediente (o dono que não corta, ou
+                    // quem já encerrou): basta a fila de hoje existir.
+                    if (status != BarberStatus.off || hasQueue)
                       PopupMenuButton<void>(
                         tooltip: l10n.consoleShiftMoreActions,
                         enabled: !console.busy,
                         iconColor: foreground,
                         itemBuilder: (context) => [
+                          // Fechar a entrada também fica a dois toques: barra os clientes novos.
                           PopupMenuItem<void>(
-                            onTap: whenFree(controller.endShift),
-                            child: Text(l10n.consoleShiftEndAction),
+                            onTap: whenFree(
+                              () => controller.setAcceptingEntries(accepting: entriesClosed),
+                            ),
+                            child: Text(
+                              entriesClosed
+                                  ? l10n.consoleOpenEntriesAction
+                                  : l10n.consoleCloseEntriesAction,
+                            ),
                           ),
+                          if (status != BarberStatus.off)
+                            PopupMenuItem<void>(
+                              onTap: whenFree(controller.endShift),
+                              child: Text(l10n.consoleShiftEndAction),
+                            ),
                         ],
                       )
                     else
@@ -370,6 +416,179 @@ class _ShiftCard extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Aviso de que a entrada está fechada, com o caminho de volta à mão: uma entrada esquecida
+/// fechada deixa a barbearia sem clientes novos sem ninguém perceber.
+class _EntriesClosedNotice extends ConsumerWidget {
+  const _EntriesClosedNotice({required this.consoleKey});
+
+  final ConsoleKey consoleKey;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final console = ref.watch(consoleControllerProvider(consoleKey));
+    final busy = console.busy;
+
+    return Semantics(
+      container: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.tertiaryContainer,
+          borderRadius: BorderRadius.circular(Insets.radius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.door_front_door_outlined, color: scheme.onTertiaryContainer),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        l10n.consoleEntriesClosedNotice,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: scheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FilledButton.tonal(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, Insets.touchTarget)),
+                  onPressed: busy
+                      ? null
+                      : () => ref
+                            .read(consoleControllerProvider(consoleKey).notifier)
+                            .setAcceptingEntries(accepting: true),
+                  child: Text(
+                    console.pending == ConsoleAction.openEntries
+                        ? l10n.consoleOpeningEntries
+                        : l10n.consoleOpenEntriesAction,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Uma pessoa da espera, com o botão para tirá-la da fila.
+///
+/// O servidor não desfaz a remoção, então aqui há confirmação: é uma ação rara e sem volta, ao
+/// contrário do "Próximo!". É um botão, e não um gesto de arrastar: funciona com mouse, teclado
+/// e leitor de tela, e não dispara ao rolar a lista.
+class _RemovableTicket extends ConsumerWidget {
+  const _RemovableTicket({required this.consoleKey, required this.ticket, super.key});
+
+  final ConsoleKey consoleKey;
+  final WaitingTicket ticket;
+
+  Future<void> _confirmAndRemove(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        return AlertDialog(
+          title: Text(l10n.consoleRemoveTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${l10n.queueTicketNumber(ticket.number)} · ${ticket.label}',
+                style: theme.textTheme.titleLarge,
+              ),
+              const SizedBox(height: Insets.sm),
+              Text(l10n.consoleRemoveBody),
+            ],
+          ),
+          actions: [
+            // O foco começa na saída segura; a ação sem volta leva a cor de erro. Os tamanhos
+            // são explícitos porque o tema estica os botões cheios na largura toda.
+            OutlinedButton(
+              autofocus: true,
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, Insets.touchTarget)),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.consoleRemoveCancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, Insets.touchTarget),
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.consoleRemoveConfirm),
+            ),
+          ],
+        );
+      },
+    );
+    // Com o diálogo aberto a fila continua ao vivo: a pessoa pode ter sido chamada ou saído, e
+    // esta linha (dona do `ref`) pode não existir mais.
+    if (!(confirmed ?? false) || !context.mounted) return;
+    unawaited(
+      ref.read(consoleControllerProvider(consoleKey).notifier).removeTicket(ticket.ticketId),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final console = ref.watch(consoleControllerProvider(consoleKey));
+    final removing =
+        console.pending == ConsoleAction.removeTicket &&
+        ref.read(consoleControllerProvider(consoleKey).notifier).removingTicketId ==
+            ticket.ticketId;
+
+    return Row(
+      children: [
+        Expanded(
+          // Lida de uma vez pelo leitor de tela; esmaecida enquanto a remoção está a caminho.
+          child: Opacity(
+            opacity: removing ? 0.5 : 1,
+            child: MergeSemantics(child: WaitingTicketTile(ticket: ticket)),
+          ),
+        ),
+        if (removing)
+          SizedBox.square(
+            dimension: Insets.touchTarget,
+            child: Padding(
+              padding: const EdgeInsets.all(Insets.md - Insets.xs),
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                semanticsLabel: l10n.consoleRemoving,
+              ),
+            ),
+          )
+        else
+          IconButton(
+            tooltip: l10n.consoleRemoveWho(ticket.number, ticket.label),
+            icon: const Icon(Icons.person_remove_outlined),
+            color: scheme.onSurfaceVariant,
+            onPressed: console.busy ? null : () => _confirmAndRemove(context, ref),
+          ),
+      ],
     );
   }
 }
