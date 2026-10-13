@@ -268,6 +268,8 @@ function advance(
 
   let called: CalledTicket | null = null;
   if (callAnother) {
+    // O console mostra quem será chamado com esta mesma regra (`PublicQueue.nextFor`, no app):
+    // se ela mudar aqui, precisa mudar lá.
     const next = waitingTickets(day).find((t) => t.preferredBarberId === null || t.preferredBarberId === barber.id);
     if (next) {
       before.push(next);

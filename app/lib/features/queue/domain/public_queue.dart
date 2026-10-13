@@ -64,6 +64,17 @@ final class PublicQueue {
     return BarberStatus.off;
   }
 
+  /// Quem seria chamado se o barbeiro apertasse "Próximo!" agora: o primeiro da fila sem
+  /// preferência ou com preferência por ele. É só para mostrar; quem decide de fato é o servidor,
+  /// com a mesma regra.
+  WaitingTicket? nextFor(String barberId) {
+    for (final ticket in waiting) {
+      final preferred = ticket.preferredBarberId;
+      if (preferred == null || preferred == barberId) return ticket;
+    }
+    return null;
+  }
+
   /// Quem o barbeiro está atendendo agora, se houver.
   ServingTicket? servedBy(String barberId) {
     for (final ticket in nowServing) {

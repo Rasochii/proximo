@@ -121,6 +121,61 @@
   "consoleShiftEnding": "Encerrando…",
   "consoleShiftMoreActions": "Mais ações do expediente",
   "consoleServingNowLabel": "Atendendo agora",
+  "consoleNextAction": "Próximo!",
+  "consoleFinishAction": "Finalizar atendimento",
+  "consoleNoShowAction": "Não veio",
+  "consoleNobodyToCall": "Ninguém para chamar",
+  "consoleCalling": "Chamando…",
+  "consoleFinishing": "Finalizando…",
+  "consoleUndoing": "Desfazendo…",
+  "consoleFinishedNotice": "Atendimento finalizado.",
+  "consoleNoShowNotice": "Marcado como não veio.",
+  "undoAction": "Desfazer",
+  "consoleNextWho": "Chamar nº {number} · {label}",
+  "@consoleNextWho": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "consoleCalledNotice": "Chamado: nº {number} · {label}",
+  "@consoleCalledNotice": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "consoleNoShowCalledNotice": "Anterior não veio. Chamado: nº {number} · {label}",
+  "@consoleNoShowCalledNotice": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "consoleNoShowWho": "Não veio: nº {number} · {label}",
+  "@consoleNoShowWho": {
+    "description": "Rótulo do botão \"Não veio\" para leitores de tela: diz quem está na cadeira.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "consoleNoMembership": "Esta conta não faz parte de nenhuma barbearia. Peça ao dono para adicionar você à equipe.",
   "consoleSwitchAccountAction": "Entrar com outra conta",
   "accountMenuTooltip": "Conta",

@@ -60,6 +60,11 @@ cd functions && npm run seed     # 2. barbearia demo + barbeiros ze@proximo.dev 
 cd app && flutter run -d chrome  # 3. app (no emulador Android o host 10.0.2.2 é usado automaticamente)
 ```
 
+O seed cria a "Barbearia do Zé" aberta o dia todo, com três clientes fictícios já na fila. Entre com
+um dos barbeiros em `/console` para iniciar o expediente e chamar o próximo; a fila pública fica em
+`/b/barbearia-do-ze` (no navegador os caminhos vêm depois de `#`: `/#/console`). Os emuladores não
+guardam dados: ao reiniciá-los, rode o seed de novo.
+
 Em um celular físico: `flutter run --dart-define=EMULATOR_HOST=<IP-do-seu-PC>`.
 
 ## Roadmap
