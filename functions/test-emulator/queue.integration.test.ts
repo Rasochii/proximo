@@ -73,7 +73,13 @@ async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, fn: 
   return results;
 }
 
-/** Horário que cobre o dia todo, para o teste não depender da hora em que roda. */
+/**
+ * Horário que cobre o dia todo: a barbearia nunca está fechada nem "ainda não abriu".
+ * Só isso não tira a hora da conta: com barbeiro disponível, o `joinQueue` estima a espera e
+ * recusa (`closing-soon`) quem não seria atendido até as 24:00. Por isso o expediente só começa
+ * depois das entradas. Resta a virada do dia: se a execução atravessar as 00:00 no fuso da
+ * barbearia, os comandos caem em agregados de dias diferentes e o teste falha.
+ */
 const allDay = [{ start: '00:00', end: '24:00' }];
 
 let barber: { uid: string; token: string };
@@ -91,8 +97,9 @@ before(async () => {
     settings: { closeEntryMinutesBefore: 0, openEntryMinutesBefore: 0, maxTicketsPerDay: 300, undoWindowSec: 15 },
   });
   await db.doc(`shops/${SHOP}/members/${barber.uid}`).set({ role: 'owner', displayName: 'Barbeiro', active: true });
-  const started = await call('setBarberStatus', barber.token, { requestId: randomUUID(), shopId: SHOP, status: 'available' });
-  assert.ok(started.ok, JSON.stringify(started));
+  // Cria o agregado do dia sem pôr ninguém em expediente, para a rajada de entradas não disputar a criação.
+  const opened = await call('setAcceptingEntries', barber.token, { requestId: randomUUID(), shopId: SHOP, accepting: true });
+  assert.ok(opened.ok, JSON.stringify(opened));
 });
 
 after(async () => {
@@ -101,6 +108,8 @@ after(async () => {
 
 describe('concorrência', () => {
   it('50 entradas concorrentes recebem números únicos e sequenciais', async () => {
+    // Nenhum barbeiro disponível ainda: sem ele a espera é desconhecida e a entrada fica aberta.
+    // Com um, o 50º teria 49 × 5 min de fila à frente, que só cabem no dia antes das 19:55.
     const customers = await Promise.all(Array.from({ length: 50 }, () => signUp()));
     const results = await mapWithConcurrency(customers, 10, (c, i) =>
       call<{ number: number }>('joinQueue', c.token, {
@@ -121,6 +130,9 @@ describe('concorrência', () => {
   });
 
   it('dois toques simultâneos em "Próximo!" com o mesmo requestId chamam uma única pessoa', async () => {
+    const started = await call('setBarberStatus', barber.token, { requestId: randomUUID(), shopId: SHOP, status: 'available' });
+    assert.ok(started.ok, JSON.stringify(started));
+
     const requestId = randomUUID();
     const [a, b] = await Promise.all([
       call<{ called: { ticketId: string } | null }>('callNext', barber.token, { requestId, shopId: SHOP }),
