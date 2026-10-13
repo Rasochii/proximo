@@ -77,7 +77,7 @@ class ShopConsoleView extends ConsumerWidget {
         messenger.showSnackBar(
           SnackBar(
             content: Text(message),
-            duration: ConsoleController.undoWindow,
+            duration: next.undoFor,
             // Com uma ação, o SnackBar por padrão não some sozinho; aqui ele tem prazo.
             persist: false,
             // Em tela larga o aviso fica na mesma coluna dos botões, e não de ponta a ponta.

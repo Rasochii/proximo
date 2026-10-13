@@ -1,5 +1,13 @@
 import type { TicketEta } from './eta';
-import { calledTickets, estimateDay, evaluateEntry, waitingTickets, type DayContext, type EntryClosedReason } from './queueDay';
+import {
+  calledTickets,
+  estimateDay,
+  evaluateEntry,
+  servingTicketOf,
+  waitingTickets,
+  type DayContext,
+  type EntryClosedReason,
+} from './queueDay';
 import { endOfLocalDayMs, toLocal } from './time';
 import type { BarberStatus, QueueDay } from './types';
 
@@ -52,7 +60,6 @@ export interface PublicQueue {
 export function buildPublicQueue(day: QueueDay, ctx: DayContext): PublicQueue {
   const etas = estimateDay(day, ctx);
   const called = calledTickets(day);
-  const numberById = new Map(called.map((t) => [t.id, t.number]));
   const waiting = waitingTickets(day);
 
   return {
@@ -68,7 +75,7 @@ export function buildPublicQueue(day: QueueDay, ctx: DayContext): PublicQueue {
         id: b.id,
         displayName: b.displayName,
         status: b.status,
-        servingNumber: b.currentTicketId ? (numberById.get(b.currentTicketId) ?? null) : null,
+        servingNumber: servingTicketOf(day, b)?.number ?? null,
       })),
     nowServing: called.map((t) => ({ ticketId: t.id, number: t.number, label: t.label, barberId: t.calledBy })),
     waiting: waiting.map((t, index) => ({

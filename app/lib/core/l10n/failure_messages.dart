@@ -27,6 +27,7 @@ extension FailureMessages on AppLocalizations {
     QueueErrorCode.barberNotOnShift => errorBarberNotOnShift,
     QueueErrorCode.barberNotAvailable => errorBarberNotAvailable,
     QueueErrorCode.finishCurrentFirst => errorFinishCurrentFirst,
+    QueueErrorCode.servingChanged => errorServingChanged,
     QueueErrorCode.notTicketOwner => errorPermission,
     QueueErrorCode.invalidArgument ||
     QueueErrorCode.invalidService ||

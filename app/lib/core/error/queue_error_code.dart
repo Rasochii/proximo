@@ -21,6 +21,7 @@ enum QueueErrorCode {
   barberNotAvailable('barber-not-available'),
   finishCurrentFirst('finish-current-first'),
   nothingToFinish('nothing-to-finish'),
+  servingChanged('serving-changed'),
   nothingToUndo('nothing-to-undo'),
   undoExpired('undo-expired'),
   undoConflict('undo-conflict'),

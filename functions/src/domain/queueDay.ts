@@ -149,6 +149,17 @@ export function isBlockingActiveTicket(ref: ActiveTicketRef | null, day: QueueDa
   return ref.dateKey === day.dateKey;
 }
 
+/**
+ * Quem está na cadeira do barbeiro: o ticket para o qual ele aponta, se ainda estiver em
+ * atendimento. É a mesma pessoa que a projeção pública mostra para aquele barbeiro. A conferência
+ * do console (`serving-changed`) depende de as duas visões nunca divergirem, então tudo que
+ * pergunta "quem este barbeiro atende?" passa por aqui.
+ */
+export function servingTicketOf(day: QueueDay, barber: Pick<BarberDayState, 'currentTicketId'>): Ticket | undefined {
+  const ticket = barber.currentTicketId ? findTicket(day, barber.currentTicketId) : undefined;
+  return ticket?.status === 'called' ? ticket : undefined;
+}
+
 export function requireBarberOnShift(day: QueueDay, barberId: string): BarberDayState {
   const barber = day.barbers[barberId];
   if (!barber || barber.status === 'off') throw new DomainError('barber-not-on-shift');

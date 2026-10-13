@@ -208,7 +208,11 @@ describe('callNext ("Próximo!")', () => {
     for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
 
     const first = next(day, T10);
-    assert.deepEqual(first.result, { finished: null, called: { ticketId: 't-a', number: 1, label: 'Cliente A.' } });
+    assert.deepEqual(first.result, {
+      finished: null,
+      called: { ticketId: 't-a', number: 1, label: 'Cliente A.' },
+      undoWindowSec: shop.settings.undoWindowSec,
+    });
     assert.equal(first.day.barbers.ze?.currentTicketId, 't-a');
 
     const second = next(first.day, T10 + 25 * 60_000);
@@ -229,8 +233,94 @@ describe('callNext ("Próximo!")', () => {
 
   it('fila vazia e ninguém em atendimento não altera nada nem cria desfazer', () => {
     const outcome = next(openDay(), T10);
-    assert.deepEqual(outcome.result, { finished: null, called: null });
+    assert.deepEqual(outcome.result, { finished: null, called: null, undoWindowSec: shop.settings.undoWindowSec });
     assert.deepEqual(outcome.day.undo, {});
+  });
+
+  it('informa a janela de desfazer configurada pela barbearia', () => {
+    const quickUndo = { ...shop, settings: { ...shop.settings, undoWindowSec: 40 } };
+    const day = join(openDay(), { uid: 'a', nowMs: T10 });
+    const outcome = callNext(day, ctxAt(T10, { shop: quickUndo }), {
+      requestId: uuid(),
+      actorUid: 'ze',
+      barberId: 'ze',
+      outcome: 'done',
+    });
+    assert.equal(outcome.result.undoWindowSec, 40);
+  });
+
+  describe('conferência de quem está na cadeira', () => {
+    const expecting = (day: QueueDay, expectedServingTicketId: string | null, outcome: 'done' | 'no_show' = 'done') =>
+      callNext(day, ctxAt(T10 + 60_000), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome, expectedServingTicketId });
+
+    /** Zé atendendo o cliente A, com B esperando. */
+    function serving(): QueueDay {
+      let day = openDay();
+      for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
+      return next(day, T10).day;
+    }
+
+    it('avança quando o console mostra a cadeira como ela está', () => {
+      assert.equal(expecting(serving(), 't-a').result.called?.ticketId, 't-b');
+      const idle = join(openDay(), { uid: 'a', nowMs: T10 });
+      assert.equal(expecting(idle, null).result.called?.ticketId, 't-a');
+    });
+
+    it('recusa se o console acha a cadeira vazia e já há alguém nela', () => {
+      // O "Próximo!" anterior foi aplicado, mas a tela não soube: avançar finalizaria o cliente A.
+      const day = serving();
+      throwsCode(() => expecting(day, null), 'serving-changed');
+      throwsCode(() => expecting(day, null, 'no_show'), 'serving-changed');
+    });
+
+    it('recusa se o console mostra outra pessoa na cadeira', () => {
+      throwsCode(() => expecting(serving(), 't-b'), 'serving-changed');
+    });
+
+    it('recusa se o console mostra alguém e a cadeira está vazia', () => {
+      const idle = join(openDay(), { uid: 'a', nowMs: T10 });
+      throwsCode(() => expecting(idle, 't-zzz'), 'serving-changed');
+    });
+
+    it('cada barbeiro responde pela própria cadeira', () => {
+      let day = withBarbers(emptyDay(), T10, 'ze', 'joao');
+      for (const uid of ['a', 'b', 'c', 'd']) day = join(day, { uid, nowMs: T10 });
+      day = next(day, T10, 'ze').day;
+      day = next(day, T10, 'joao').day;
+      const by = (barberId: string, expectedServingTicketId: string | null, current = day) =>
+        callNext(current, ctxAt(T10 + 60_000), { requestId: uuid(), actorUid: barberId, barberId, outcome: 'done', expectedServingTicketId });
+
+      // Zé não avança olhando para a cadeira do João.
+      throwsCode(() => by('ze', 't-b'), 'serving-changed');
+      // O avanço do João não invalida o que o Zé vê na própria cadeira.
+      const afterJoao = by('joao', 't-b').day;
+      assert.equal(by('ze', 't-a', afterJoao).result.finished?.ticketId, 't-a');
+    });
+
+    it('se o cliente na cadeira sai da fila, a tela antiga é recusada e a nova segue', () => {
+      const left = leaveQueue(serving(), ctxAt(T10 + 30_000), { requestId: uuid(), actorUid: 'a', ticketId: 't-a' }).day;
+      throwsCode(() => expecting(left, 't-a'), 'serving-changed');
+      const outcome = expecting(left, null);
+      assert.equal(outcome.result.finished, null);
+      assert.equal(outcome.result.called?.ticketId, 't-b');
+    });
+
+    it('depois de desfazer, vale quem voltou para a cadeira', () => {
+      const advanced = expecting(serving(), 't-a').day;
+      const undone = undoLast(advanced, ctxAt(T10 + 65_000), { requestId: uuid(), actorUid: 'ze', barberId: 'ze' }).day;
+      throwsCode(() => expecting(undone, 't-b'), 'serving-changed');
+      assert.equal(expecting(undone, 't-a').result.called?.ticketId, 't-b');
+    });
+
+    it('a nova tentativa do mesmo pedido devolve o resultado, mesmo com a cadeira já diferente', () => {
+      const idle = join(openDay(), { uid: 'a', nowMs: T10 });
+      const cmd = { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done', expectedServingTicketId: null } as const;
+      const first = callNext(idle, ctxAt(T10), cmd);
+      const retry = callNext(first.day, ctxAt(T10 + 20_000), cmd);
+      assert.equal(retry.replayed, true);
+      assert.deepEqual(retry.result, first.result);
+      assert.equal(retry.day, first.day);
+    });
   });
 
   it('dois barbeiros nunca chamam o mesmo cliente', () => {
@@ -272,6 +362,50 @@ describe('finishCurrent', () => {
       () => finishCurrent(openDay(), ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }),
       'nothing-to-finish',
     );
+  });
+
+  it('exige expediente iniciado', () => {
+    throwsCode(
+      () => finishCurrent(emptyDay(), ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }),
+      'barber-not-on-shift',
+    );
+  });
+
+  it('recusa se o console mostra na cadeira alguém que não está mais lá', () => {
+    let day = openDay();
+    for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
+    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    const finish = (current: QueueDay, expectedServingTicketId: string | null) =>
+      finishCurrent(current, ctxAt(T10 + 60_000), {
+        requestId: uuid(),
+        actorUid: 'ze',
+        barberId: 'ze',
+        outcome: 'done',
+        expectedServingTicketId,
+      });
+
+    throwsCode(() => finish(day, 't-b'), 'serving-changed');
+    const finished = finish(day, 't-a');
+    assert.equal(finished.result.finished?.ticketId, 't-a');
+    // A cadeira esvaziou: quem ainda vê o cliente A recebe "a fila mudou", não "nada a finalizar".
+    throwsCode(() => finish(finished.day, 't-a'), 'serving-changed');
+    // Quem já vê a cadeira vazia recebe o motivo de sempre.
+    throwsCode(() => finish(finished.day, null), 'nothing-to-finish');
+  });
+
+  it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
+    let day = openDay();
+    for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
+    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    const cmd = { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done', expectedServingTicketId: 't-a' } as const;
+
+    const first = finishCurrent(day, ctxAt(T10 + 60_000), cmd);
+    const retry = finishCurrent(first.day, ctxAt(T10 + 80_000), cmd);
+    assert.equal(retry.replayed, true);
+    assert.deepEqual(retry.result, first.result);
+    assert.equal(retry.day, first.day);
+
+    throwsCode(() => callNext(first.day, ctxAt(T10 + 90_000), cmd), 'request-conflict');
   });
 });
 

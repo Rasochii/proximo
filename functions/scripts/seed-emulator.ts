@@ -48,6 +48,15 @@ const DEMO_CUSTOMERS = [
 ] as const;
 
 async function main(): Promise<void> {
+  // O seed usa sempre o projeto fixo acima, mas um terminal apontado para um projeto de verdade
+  // é sinal de engano: melhor parar aqui.
+  for (const name of ['GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT'] as const) {
+    const project = process.env[name];
+    if (project && !project.startsWith('demo-')) {
+      throw new Error(`${name} aponta para "${project}". O seed só roda nos emuladores, com projetos demo-*.`);
+    }
+  }
+
   // Antes de `db()`: é este app, com o projeto fixo, que o Firestore das functions passa a usar.
   initializeApp({ projectId: PROJECT_ID });
   // O mesmo Firestore das functions: assim o seed pode usar a transação da fila de verdade.

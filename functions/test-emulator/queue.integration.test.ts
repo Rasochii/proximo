@@ -84,6 +84,12 @@ const allDay = [{ start: '00:00', end: '24:00' }];
 
 let barber: { uid: string; token: string };
 
+/** O agregado de hoje. Os ids dos dias são datas, então o último é o mais recente. */
+async function todaysTickets(): Promise<{ id: string; status: string }[]> {
+  const days = await getFirestore().collection(`shops/${SHOP}/days`).get();
+  return (days.docs.at(-1)!.data() as { tickets: { id: string; status: string }[] }).tickets;
+}
+
 before(async () => {
   if (getApps().length === 0) initializeApp({ projectId: PROJECT_ID });
   const db = getFirestore();
@@ -133,25 +139,61 @@ describe('concorrência', () => {
     const started = await call('setBarberStatus', barber.token, { requestId: randomUUID(), shopId: SHOP, status: 'available' });
     assert.ok(started.ok, JSON.stringify(started));
 
-    const requestId = randomUUID();
+    // O mesmo pedido duas vezes: mesmo requestId e a mesma cadeira vazia vista pelo console.
+    const payload = { requestId: randomUUID(), shopId: SHOP, expectedServingTicketId: null };
     const [a, b] = await Promise.all([
-      call<{ called: { ticketId: string } | null }>('callNext', barber.token, { requestId, shopId: SHOP }),
-      call<{ called: { ticketId: string } | null }>('callNext', barber.token, { requestId, shopId: SHOP }),
+      call<{ called: { ticketId: string } | null }>('callNext', barber.token, payload),
+      call<{ called: { ticketId: string } | null }>('callNext', barber.token, payload),
     ]);
     assert.ok(a.ok && b.ok, JSON.stringify([a, b]));
     assert.deepEqual(a.result, b.result);
 
-    const day = (await getFirestore().collection(`shops/${SHOP}/days`).get()).docs[0]!.data() as {
-      tickets: { status: string }[];
-    };
-    assert.equal(day.tickets.filter((t) => t.status === 'called').length, 1);
+    assert.equal((await todaysTickets()).filter((t) => t.status === 'called').length, 1);
+  });
+
+  it('"Próximo!" vindo de uma tela desatualizada é recusado, sem finalizar quem acabou de ser chamado', async () => {
+    type Advance = { finished: { ticketId: string } | null; called: { ticketId: string } | null; undoWindowSec: number };
+    const called = (await todaysTickets()).filter((t) => t.status === 'called');
+    assert.equal(called.length, 1, 'o teste anterior deixa uma pessoa na cadeira');
+    const serving = called[0]!.id;
+
+    // O console ainda mostra a cadeira vazia (a tela não acompanhou o "Próximo!" anterior) e o barbeiro toca de novo.
+    const stale = await call<Advance>('callNext', barber.token, {
+      requestId: randomUUID(),
+      shopId: SHOP,
+      expectedServingTicketId: null,
+    });
+    assert.ok(!stale.ok, JSON.stringify(stale));
+    assert.equal(stale.error.status, 'ABORTED');
+    assert.equal(stale.error.details?.code, 'serving-changed');
+
+    // Com a tela em dia, o mesmo toque avança: finaliza quem está na cadeira e chama o seguinte.
+    const fresh = await call<Advance>('callNext', barber.token, {
+      requestId: randomUUID(),
+      shopId: SHOP,
+      expectedServingTicketId: serving,
+    });
+    assert.ok(fresh.ok, JSON.stringify(fresh));
+    assert.equal(fresh.result.finished?.ticketId, serving);
+    assert.ok(fresh.result.called && fresh.result.called.ticketId !== serving);
+    assert.equal(fresh.result.undoWindowSec, 15);
   });
 
   it('cliente não pode chamar o próximo', async () => {
     const customer = await signUp();
-    const res = await call('callNext', customer.token, { requestId: randomUUID(), shopId: SHOP });
+    const res = await call('callNext', customer.token, {
+      requestId: randomUUID(),
+      shopId: SHOP,
+      expectedServingTicketId: null,
+    });
     assert.ok(!res.ok);
     assert.equal(res.error.status, 'PERMISSION_DENIED');
+  });
+
+  it('avanço que não diz quem está na cadeira é recusado como entrada inválida', async () => {
+    const res = await call('callNext', barber.token, { requestId: randomUUID(), shopId: SHOP });
+    assert.ok(!res.ok);
+    assert.equal(res.error.status, 'INVALID_ARGUMENT');
   });
 
   it('requisição sem login é recusada', async () => {

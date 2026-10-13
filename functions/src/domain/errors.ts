@@ -27,6 +27,7 @@ export const DOMAIN_ERROR_CODES = [
   'barber-not-available',
   'finish-current-first',
   'nothing-to-finish',
+  'serving-changed',
   // Desfazer
   'nothing-to-undo',
   'undo-expired',
@@ -70,6 +71,7 @@ export const DEFAULT_MESSAGES: Readonly<Record<DomainErrorCode, string>> = {
   'barber-not-available': 'Seu expediente está pausado.',
   'finish-current-first': 'Finalize o atendimento atual primeiro.',
   'nothing-to-finish': 'Não há atendimento em andamento.',
+  'serving-changed': 'A fila mudou. Confira quem está na cadeira.',
   'nothing-to-undo': 'Não há nada para desfazer.',
   'undo-expired': 'O tempo para desfazer acabou.',
   'undo-conflict': 'A fila mudou e não é mais possível desfazer.',
