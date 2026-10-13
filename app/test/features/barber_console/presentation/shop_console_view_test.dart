@@ -582,6 +582,27 @@ void main() {
       expect(big(tester).onPressed, isNotNull);
     });
 
+    testWidgets('se a cadeira mudou no servidor, a barra explica e não chama ninguém', (
+      tester,
+    ) async {
+      final backend = FakeCallables(
+        (name, payload) => throw FakeCallables.domainError('serving-changed'),
+      );
+      await openConsole(tester, backend: backend, queue: queueWithZe('available'));
+
+      await tester.tap(bigButton);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(ShopConsoleActionBar),
+          matching: find.text('A fila mudou. Confira quem está na cadeira.'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Desfazer'), findsNothing);
+    });
+
     testWidgets('o aviso some quando acaba o prazo de desfazer', (tester) async {
       final backend = FakeCallables((name, payload) => calledLucas());
       final (:docs, backend: _) = await openConsole(
@@ -600,6 +621,27 @@ void main() {
 
       expect(find.text('Desfazer'), findsNothing);
       expect(find.text('Chamado: nº 2 · Lucas M.'), findsNothing);
+    });
+
+    testWidgets('o aviso fica pelo tempo de desfazer que a barbearia configurou', (tester) async {
+      final backend = FakeCallables((name, payload) => {...calledLucas(), 'undoWindowSec': 40});
+      final (:docs, backend: _) = await openConsole(
+        tester,
+        backend: backend,
+        queue: queueWithZe('available'),
+      );
+      await tester.tap(bigButton);
+      await tester.pump();
+      docs.emit(_queue, zeServingLucas());
+      await letShiftSettle(tester);
+
+      // Além dos 15 s do padrão, o aviso continua lá.
+      await tester.pump(const Duration(seconds: 20));
+      expect(find.text('Desfazer'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(find.text('Desfazer'), findsNothing);
     });
 
     testWidgets('"Desfazer" tocado na hora, antes de a fila confirmar, é enviado', (tester) async {

@@ -7,6 +7,7 @@ import {
   isBlockingActiveTicket,
   replaceTickets,
   requireBarberOnShift,
+  servingTicketOf,
   waitingTickets,
   type DayContext,
 } from './queueDay';
@@ -194,10 +195,20 @@ export interface BarberCommand extends CommandMeta {
   readonly barberId: string;
 }
 
-export interface CallNextCommand extends BarberCommand {
+/** Um avanço da fila pelo barbeiro: finalizar quem está na cadeira e, no "Próximo!", chamar o seguinte. */
+export interface AdvanceCommand extends BarberCommand {
   /** Como terminou o atendimento atual, se houver. */
   readonly outcome: FinishOutcome;
+  /**
+   * Quem o console mostra na cadeira do barbeiro (`null` = ninguém). Se o servidor discordar, a
+   * tela está desatualizada e o comando é recusado em vez de agir sobre outra pessoa. As
+   * callables sempre informam; sem o campo (uso interno e testes), não há conferência.
+   */
+  readonly expectedServingTicketId?: string | null | undefined;
 }
+
+export type CallNextCommand = AdvanceCommand;
+export type FinishCurrentCommand = AdvanceCommand;
 
 export interface CalledTicket {
   readonly ticketId: string;
@@ -208,6 +219,11 @@ export interface CalledTicket {
 export interface CallNextResult {
   readonly finished: { readonly ticketId: string; readonly outcome: FinishOutcome } | null;
   readonly called: CalledTicket | null;
+  /**
+   * Janela de desfazer configurada pela barbearia, em segundos. Conta de quando o avanço foi
+   * aplicado: numa resposta que chega atrasada (nova tentativa do mesmo pedido), parte dela já passou.
+   */
+  readonly undoWindowSec: number;
 }
 
 /**
@@ -215,11 +231,7 @@ export interface CallNextResult {
  * primeiro ticket compatível — tudo numa única operação atômica e desfazível.
  */
 export function callNext(day: QueueDay, ctx: DayContext, cmd: CallNextCommand): CommandOutcome<CallNextResult> {
-  return execute('callNext', day, ctx, cmd, () => advance(day, ctx, cmd, cmd.outcome, true, 'callNext'));
-}
-
-export interface FinishCurrentCommand extends BarberCommand {
-  readonly outcome: FinishOutcome;
+  return execute('callNext', day, ctx, cmd, () => advance(day, ctx, cmd, true, 'callNext'));
 }
 
 /** Finaliza o atendimento atual sem chamar o próximo (ex.: antes do almoço). */
@@ -228,32 +240,38 @@ export function finishCurrent(
   ctx: DayContext,
   cmd: FinishCurrentCommand,
 ): CommandOutcome<CallNextResult> {
-  return execute('finishCurrent', day, ctx, cmd, () => {
-    const barber = requireBarberOnShift(day, cmd.barberId);
-    if (!barber.currentTicketId) throw new DomainError('nothing-to-finish');
-    return advance(day, ctx, cmd, cmd.outcome, false, 'finishCurrent');
-  });
+  return execute('finishCurrent', day, ctx, cmd, () => advance(day, ctx, cmd, false, 'finishCurrent'));
 }
 
 function advance(
   day: QueueDay,
   ctx: DayContext,
-  cmd: BarberCommand,
-  outcome: FinishOutcome,
+  cmd: AdvanceCommand,
   callAnother: boolean,
   command: UndoableCommand,
 ): Mutation<CallNextResult> {
   const barber = requireBarberOnShift(day, cmd.barberId);
   if (callAnother && barber.status !== 'available') throw new DomainError('barber-not-available');
 
+  const { outcome } = cmd;
+  const undoWindowSec = ctx.shop.settings.undoWindowSec;
   const before: Ticket[] = [];
   const after: Ticket[] = [];
   const effects: Effect[] = [];
   let stats = ctx.stats;
   let finished: CallNextResult['finished'] = null;
 
-  const current = barber.currentTicketId ? findTicket(day, barber.currentTicketId) : undefined;
-  if (current && current.status === 'called') {
+  const current = servingTicketOf(day, barber);
+
+  // Um avanço finaliza quem está na cadeira. Se o console mostra outra pessoa (a tela está
+  // atrasada, ou o barbeiro agiu em outro aparelho), avançar finalizaria quem ele não está
+  // vendo: recusa, e a tela se atualiza.
+  if (cmd.expectedServingTicketId !== undefined && cmd.expectedServingTicketId !== (current?.id ?? null)) {
+    throw new DomainError('serving-changed');
+  }
+  if (!callAnother && !current) throw new DomainError('nothing-to-finish');
+
+  if (current) {
     const done: Ticket = { ...current, status: outcome, finishedAt: ctx.nowMs };
     before.push(current);
     after.push(done);
@@ -280,7 +298,7 @@ function advance(
 
   if (!finished && !called) {
     // Nada a fazer (fila vazia e ninguém em atendimento): não cria entrada de desfazer.
-    return { day, result: { finished: null, called: null } };
+    return { day, result: { finished: null, called: null, undoWindowSec } };
   }
 
   const updatedBarber: BarberDayState = { ...barber, currentTicketId: called?.ticketId ?? null };
@@ -300,7 +318,7 @@ function advance(
       undo: { ...day.undo, [barber.id]: undoEntry },
     },
     stats,
-    result: { finished, called },
+    result: { finished, called, undoWindowSec },
     effects,
   };
 }

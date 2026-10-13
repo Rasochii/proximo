@@ -25,14 +25,27 @@ abstract interface class CustomerQueueRepository {
 /// (o backend usa o uid autenticado como `barberId`).
 abstract interface class BarberQueueRepository {
   /// "Próximo!": finaliza o atual com [outcome] e chama o próximo compatível.
+  ///
+  /// [servingTicketId] é quem a tela mostra na cadeira do barbeiro (`null` = ninguém). Se o
+  /// servidor discordar, a tela está desatualizada e o comando é recusado (`serving-changed`)
+  /// em vez de finalizar outra pessoa.
+  ///
+  /// [requestId] repete um pedido que ficou sem resposta: se o servidor já o tinha aplicado,
+  /// devolve o mesmo resultado em vez de avançar a fila de novo. Sem ele, o pedido é novo.
   Future<Result<AdvanceResult>> callNext({
     required String shopId,
+    required String? servingTicketId,
     FinishOutcome outcome = FinishOutcome.done,
+    String? requestId,
   });
 
+  /// Finaliza o atual com [outcome] sem chamar ninguém. [servingTicketId] e [requestId] como em
+  /// [callNext].
   Future<Result<AdvanceResult>> finishCurrent({
     required String shopId,
+    required String? servingTicketId,
     FinishOutcome outcome = FinishOutcome.done,
+    String? requestId,
   });
 
   Future<Result<void>> undoLast({required String shopId});

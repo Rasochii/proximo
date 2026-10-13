@@ -55,14 +55,28 @@ final class BarberQueueRepositoryImpl implements BarberQueueRepository {
   @override
   Future<Result<AdvanceResult>> callNext({
     required String shopId,
+    required String? servingTicketId,
     FinishOutcome outcome = FinishOutcome.done,
-  }) => _api.callNext(shopId: shopId, outcome: outcome);
+    String? requestId,
+  }) => _api.callNext(
+    shopId: shopId,
+    outcome: outcome,
+    servingTicketId: servingTicketId,
+    requestId: requestId,
+  );
 
   @override
   Future<Result<AdvanceResult>> finishCurrent({
     required String shopId,
+    required String? servingTicketId,
     FinishOutcome outcome = FinishOutcome.done,
-  }) => _api.finishCurrent(shopId: shopId, outcome: outcome);
+    String? requestId,
+  }) => _api.finishCurrent(
+    shopId: shopId,
+    outcome: outcome,
+    servingTicketId: servingTicketId,
+    requestId: requestId,
+  );
 
   @override
   Future<Result<void>> undoLast({required String shopId}) => _api.undoLast(shopId: shopId);

@@ -116,7 +116,11 @@ void main() {
         respond({'finished': null, 'called': null}),
       ]);
 
-      final result = await apiWith(backend).callNext(shopId: 's', outcome: FinishOutcome.done);
+      final result = await apiWith(backend).callNext(
+        shopId: 's',
+        outcome: FinishOutcome.done,
+        servingTicketId: null,
+      );
 
       expect(result, const Ok(AdvanceResult()));
       expect(backend.calls.map((c) => c.payload['requestId']).toSet(), {'req-1'});
@@ -193,12 +197,18 @@ void main() {
         respond({
           'finished': {'ticketId': 't1', 'outcome': 'no_show'},
           'called': {'ticketId': 't2', 'number': 2, 'label': 'Lucas M.'},
+          'undoWindowSec': 40,
         }),
       ]);
 
-      final result = await apiWith(backend).callNext(shopId: 's', outcome: FinishOutcome.noShow);
+      final result = await apiWith(backend).callNext(
+        shopId: 's',
+        outcome: FinishOutcome.noShow,
+        servingTicketId: 't1',
+      );
 
       expect(backend.calls.single.payload['outcome'], 'no_show');
+      expect(backend.calls.single.payload['expectedServingTicketId'], 't1');
       expect(
         result,
         const Ok(
@@ -206,9 +216,67 @@ void main() {
             finishedTicketId: 't1',
             finishedOutcome: FinishOutcome.noShow,
             called: CalledTicket(ticketId: 't2', number: 2, label: 'Lucas M.'),
+            undoWindow: Duration(seconds: 40),
           ),
         ),
       );
+    });
+
+    test('cadeira vazia vai no pedido como nulo, e não como campo ausente', () async {
+      final backend = FakeBackend([
+        respond({'finished': null, 'called': null}),
+        respond({'finished': null, 'called': null}),
+      ]);
+      final api = apiWith(backend);
+
+      await api.callNext(shopId: 's', outcome: FinishOutcome.done, servingTicketId: null);
+      await api.finishCurrent(shopId: 's', outcome: FinishOutcome.done, servingTicketId: null);
+
+      // Ausente, o servidor não conferiria a cadeira; nulo quer dizer "não vejo ninguém nela".
+      for (final call in backend.calls) {
+        expect(call.payload, containsPair('expectedServingTicketId', null));
+      }
+    });
+
+    test('cadeira diferente no servidor vira falha de regra, sem nova tentativa', () async {
+      final backend = FakeBackend([
+        failWith('aborted', details: {'code': 'serving-changed'}),
+      ]);
+
+      final result = await apiWith(
+        backend,
+      ).callNext(shopId: 's', outcome: FinishOutcome.done, servingTicketId: null);
+
+      expect(result.failureOrNull, const QueueRuleFailure(QueueErrorCode.servingChanged));
+      expect(backend.calls, hasLength(1));
+    });
+
+    test('repete um pedido sem resposta com o requestId informado', () async {
+      final backend = FakeBackend([
+        respond({'finished': null, 'called': null}),
+      ]);
+
+      await apiWith(backend).callNext(
+        shopId: 's',
+        outcome: FinishOutcome.done,
+        servingTicketId: null,
+        requestId: 'req-antigo',
+      );
+
+      expect(backend.calls.single.payload['requestId'], 'req-antigo');
+    });
+
+    test('servidor que não informa a janela de desfazer deixa o padrão para o app', () async {
+      final backend = FakeBackend([
+        respond({'finished': null, 'called': null}),
+      ]);
+
+      final result = await apiWith(
+        backend,
+      ).finishCurrent(shopId: 's', outcome: FinishOutcome.done, servingTicketId: 't1');
+
+      expect(backend.calls.single.payload['expectedServingTicketId'], 't1');
+      expect(result.valueOrNull?.undoWindow, isNull);
     });
   });
 }

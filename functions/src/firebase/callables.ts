@@ -96,7 +96,13 @@ export const callNext = callable('callNext', (request, uid) => {
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) =>
-      callNextCommand(day, ctx, { requestId: input.requestId, actorUid: uid, barberId: uid, outcome: input.outcome }),
+      callNextCommand(day, ctx, {
+        requestId: input.requestId,
+        actorUid: uid,
+        barberId: uid,
+        outcome: input.outcome,
+        expectedServingTicketId: input.expectedServingTicketId,
+      }),
   });
 });
 
@@ -108,7 +114,13 @@ export const finishCurrent = callable('finishCurrent', (request, uid) => {
     actorUid: uid,
     requireMember: true,
     execute: ({ day, ctx }) =>
-      finishCurrentCommand(day, ctx, { requestId: input.requestId, actorUid: uid, barberId: uid, outcome: input.outcome }),
+      finishCurrentCommand(day, ctx, {
+        requestId: input.requestId,
+        actorUid: uid,
+        barberId: uid,
+        outcome: input.outcome,
+        expectedServingTicketId: input.expectedServingTicketId,
+      }),
   });
 });
 
