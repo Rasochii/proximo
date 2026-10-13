@@ -120,6 +120,28 @@
   "consoleShiftPausing": "Pausando…",
   "consoleShiftResuming": "Retomando…",
   "consoleShiftEnding": "Encerrando…",
+  "consoleCloseEntriesAction": "Fechar entrada",
+  "consoleOpenEntriesAction": "Reabrir entrada",
+  "consoleClosingEntries": "Fechando a entrada…",
+  "consoleOpeningEntries": "Reabrindo a entrada…",
+  "consoleEntriesClosedNotice": "Entrada fechada: ninguém novo entra na fila. Quem já está nela continua sendo atendido.",
+  "consoleRemoving": "Removendo…",
+  "errorTicketGone": "Essa pessoa já não está mais esperando.",
+  "consoleRemoveConfirm": "Remover",
+  "consoleRemoveCancel": "Manter na fila",
+  "consoleRemoveBody": "A pessoa perde o lugar. Não dá para desfazer.",
+  "consoleRemoveTitle": "Remover da fila?",
+  "consoleRemoveWho": "Remover nº {number} · {label} da fila",
+  "@consoleRemoveWho": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "consoleShiftMoreActions": "Mais ações do expediente",
   "consoleServingNowLabel": "Atendendo agora",
   "consoleNextAction": "Próximo!",

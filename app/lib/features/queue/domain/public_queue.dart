@@ -39,6 +39,9 @@ final class PublicQueue {
 
   int get waitingCount => waiting.length;
 
+  /// A equipe fechou a entrada: ninguém novo entra, e quem já está na fila continua.
+  bool get entriesClosedByStaff => entry.closedReason == QueueErrorCode.entriesClosed;
+
   /// Ticket do usuário na fila de espera, se estiver aguardando.
   WaitingTicket? waitingTicket(String ticketId) {
     for (final ticket in waiting) {

@@ -699,6 +699,67 @@ void main() {
     });
   });
 
+  group('remover da fila e fechar a entrada', () {
+    JsonMap closed(JsonMap queue) => {
+      ...queue,
+      'entry': {
+        'open': false,
+        'reason': 'entries-closed',
+        'eta': {'kind': 'unknown'},
+      },
+    };
+
+    testConsole('remover fica em aberto até a pessoa sair da espera', (tester) async {
+      arrange(
+        queue: publicQueueJson(
+          barbers: [
+            {'id': _me, 'displayName': 'Zé', 'status': 'available', 'servingNumber': null},
+          ],
+          nowServing: [],
+        ),
+      );
+      await tester.pump();
+
+      unawaited(controller().removeTicket('t2'));
+      await tester.pump();
+
+      expect(backend.calls.single.name, 'removeTicket');
+      expect(backend.calls.single.payload, containsPair('ticketId', 't2'));
+      expect(state().pending, ConsoleAction.removeTicket);
+
+      docs.emit(_queue, publicQueueJson(waiting: 0, barbers: [], nowServing: []));
+      await tester.pump();
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
+    });
+
+    testConsole('fechar e reabrir a entrada esperam a fila mostrar a mudança', (tester) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+
+      unawaited(controller().setAcceptingEntries(accepting: false));
+      await tester.pump();
+      expect(backend.calls.single.name, 'setAcceptingEntries');
+      expect(backend.calls.single.payload, containsPair('accepting', false));
+      expect(state().pending, ConsoleAction.closeEntries);
+
+      docs.emit(_queue, closed(queueWith('available')));
+      await tester.pump();
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
+
+      unawaited(controller().setAcceptingEntries(accepting: true));
+      await tester.pump();
+      expect(backend.calls.last.payload, containsPair('accepting', true));
+      expect(state().pending, ConsoleAction.openEntries);
+
+      docs.emit(_queue, queueWith('available'));
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+      expect(state().busy, isFalse);
+    });
+  });
+
   group('um comando por vez', () {
     testConsole('enquanto ocupado, outro pedido é ignorado, seja qual for', (tester) async {
       arrange(queue: queueWith('available'));

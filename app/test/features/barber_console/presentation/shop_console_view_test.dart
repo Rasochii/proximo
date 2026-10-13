@@ -737,6 +737,142 @@ void main() {
     });
   });
 
+  group('remover da fila e fechar a entrada', () {
+    JsonMap closed(JsonMap queue) => {
+      ...queue,
+      'entry': {
+        'open': false,
+        'reason': 'entries-closed',
+        'eta': {'kind': 'unknown'},
+      },
+    };
+
+    Future<void> tapRemoveLucas(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Remover nº 2 · Lucas M. da fila'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('o botão da linha pede confirmação e só então remove', (tester) async {
+      final (:docs, :backend) = await openConsole(tester, queue: queueWithZe('available'));
+
+      await tapRemoveLucas(tester);
+      expect(find.text('Remover da fila?'), findsOneWidget);
+      expect(find.text('nº 2 · Lucas M.'), findsOneWidget);
+      expect(backend.calls, isEmpty);
+
+      await tester.tap(find.text('Remover'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(backend.calls.single.name, 'removeTicket');
+      expect(backend.calls.single.payload, containsPair('ticketId', 't2'));
+      // A linha continua na tela até a fila confirmar, marcada como em remoção.
+      expect(find.text('Lucas M.'), findsOneWidget);
+      expect(find.bySemanticsLabel('Removendo…'), findsWidgets);
+      expect(find.byTooltip('Remover nº 2 · Lucas M. da fila'), findsNothing);
+      // O botão do expediente não anuncia uma ação que não é dele.
+      expect(find.text('Fazer pausa'), findsOneWidget);
+
+      docs.emit(_queue, queueWithZe('available', waiting: 0));
+      await letShiftSettle(tester);
+      expect(find.text('Lucas M.'), findsNothing);
+    });
+
+    testWidgets('cancelar a confirmação não remove ninguém', (tester) async {
+      final (docs: _, :backend) = await openConsole(tester, queue: queueWithZe('available'));
+
+      await tapRemoveLucas(tester);
+      await tester.tap(find.text('Manter na fila'));
+      await tester.pumpAndSettle();
+
+      expect(backend.calls, isEmpty);
+      expect(find.text('Lucas M.'), findsOneWidget);
+    });
+
+    testWidgets('se a pessoa sai da espera com a confirmação aberta, nada é enviado', (
+      tester,
+    ) async {
+      final (:docs, :backend) = await openConsole(tester, queue: queueWithZe('available'));
+      await tapRemoveLucas(tester);
+
+      // Um colega chamou o Lucas enquanto o diálogo estava aberto.
+      docs.emit(_queue, queueWithZe('available', waiting: 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Lucas M.'), findsNothing);
+      await tester.tap(find.text('Remover'));
+      await tester.pumpAndSettle();
+
+      expect(backend.calls, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('remoção recusada porque a pessoa já saiu explica o que houve', (tester) async {
+      final backend = FakeCallables(
+        (name, payload) => throw FakeCallables.domainError('invalid-ticket-state'),
+      );
+      await openConsole(tester, backend: backend, queue: queueWithZe('available'));
+
+      await tapRemoveLucas(tester);
+      await tester.tap(find.text('Remover'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Essa pessoa já não está mais esperando.'), findsOneWidget);
+    });
+
+    testWidgets('fora do expediente também dá para fechar a entrada', (tester) async {
+      final (docs: _, :backend) = await openConsole(tester, queue: publicQueueJson());
+      expect(find.text('Fora do expediente'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Mais ações do expediente'));
+      await tester.pumpAndSettle();
+      expect(find.text('Encerrar expediente'), findsNothing);
+      await tester.tap(find.text('Fechar entrada'));
+      await tester.pump();
+
+      expect(backend.calls.single.payload, containsPair('accepting', false));
+      await letShiftSettle(tester);
+    });
+
+    testWidgets('fechar a entrada fica no menu do expediente', (tester) async {
+      final (:docs, :backend) = await openConsole(tester, queue: queueWithZe('available'));
+      expect(find.text('Fechar entrada'), findsNothing);
+
+      await tester.tap(find.byTooltip('Mais ações do expediente'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fechar entrada'));
+      await tester.pump();
+
+      expect(backend.calls.single.name, 'setAcceptingEntries');
+      expect(backend.calls.single.payload, containsPair('accepting', false));
+      // O progresso aparece no cartão, sem trocar o texto do botão de expediente.
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('Fazer pausa'), findsOneWidget);
+
+      docs.emit(_queue, closed(queueWithZe('available')));
+      await letShiftSettle(tester);
+      expect(find.textContaining('Entrada fechada'), findsOneWidget);
+    });
+
+    testWidgets('com a entrada fechada, o aviso oferece reabrir', (tester) async {
+      final (:docs, :backend) = await openConsole(
+        tester,
+        queue: closed(queueWithZe('available')),
+      );
+      expect(find.textContaining('Entrada fechada'), findsOneWidget);
+
+      // Em telas baixas o aviso pode estar atrás da barra de ação: rola até ele.
+      await tester.ensureVisible(find.text('Reabrir entrada'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reabrir entrada'));
+      await tester.pump();
+      expect(backend.calls.single.payload, containsPair('accepting', true));
+
+      docs.emit(_queue, queueWithZe('available'));
+      await letShiftSettle(tester);
+      expect(find.textContaining('Entrada fechada'), findsNothing);
+    });
+  });
+
   testWidgets('enquanto a fila não chega, mostra que está carregando', (tester) async {
     final docs = FakeDocuments({
       _shop: shopJson(),
