@@ -1,0 +1,3 @@
+#!/bin/sh
+# Trava de revisão (ADR 0008). O hook SessionStart aponta o git para esta pasta.
+exec node .claude/hooks/review-gate.mjs --pre-commit

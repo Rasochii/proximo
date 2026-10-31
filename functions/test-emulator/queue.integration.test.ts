@@ -179,6 +179,22 @@ describe('concorrência', () => {
     assert.equal(fresh.result.undoWindowSec, 15);
   });
 
+  it('"Finalizar" vindo de uma tela desatualizada é recusado, e quem está na cadeira continua nela', async () => {
+    const calledIds = async () => (await todaysTickets()).filter((t) => t.status === 'called').map((t) => t.id);
+    const before = await calledIds();
+    assert.equal(before.length, 1, 'o teste anterior deixa uma pessoa na cadeira');
+
+    const stale = await call('finishCurrent', barber.token, {
+      requestId: randomUUID(),
+      shopId: SHOP,
+      expectedServingTicketId: null,
+    });
+    assert.ok(!stale.ok, JSON.stringify(stale));
+    assert.equal(stale.error.status, 'ABORTED');
+    assert.equal(stale.error.details?.code, 'serving-changed');
+    assert.deepEqual(await calledIds(), before);
+  });
+
   it('cliente não pode chamar o próximo', async () => {
     const customer = await signUp();
     const res = await call('callNext', customer.token, {

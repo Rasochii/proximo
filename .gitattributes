@@ -1,0 +1,2 @@
+# Script de shell com CRLF quebra: o hook receberia o argumento com um retorno de carro no fim.
+.githooks/* text eol=lf

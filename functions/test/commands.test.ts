@@ -17,7 +17,7 @@ import {
   type JoinQueueCommand,
   type QueueDay,
 } from '../src/domain';
-import { at, ctxAt, emptyDay, join, SATURDAY, shop, SUNDAY, uuid, withBarbers } from './fixtures';
+import { advanceCmd, at, ctxAt, emptyDay, join, SATURDAY, shop, SUNDAY, uuid, withBarbers } from './fixtures';
 
 const T10 = at(`${SATURDAY}T10:00`);
 
@@ -173,7 +173,7 @@ describe('leaveQueue', () => {
 
   it('libera o barbeiro se o cliente desistir depois de chamado', () => {
     let day = join(openDay(), { uid: 'u1', nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
     day = leaveQueue(day, ctxAt(T10), { requestId: uuid(), actorUid: 'u1', ticketId: 't-u1' }).day;
     assert.equal(day.barbers.ze?.currentTicketId, null);
   });
@@ -185,11 +185,25 @@ describe('leaveQueue', () => {
     const left = leaveQueue(day, ctxAt(T10), { requestId: uuid(), actorUid: 'u1', ticketId: 't-u1' }).day;
     throwsCode(() => leaveQueue(left, ctxAt(T10), { requestId: uuid(), actorUid: 'u1', ticketId: 't-u1' }), 'invalid-ticket-state');
   });
+
+  it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
+    const day = join(openDay(), { uid: 'u1', nowMs: T10 });
+    const cmd = { requestId: uuid(), actorUid: 'u1', ticketId: 't-u1' };
+
+    const first = leaveQueue(day, ctxAt(T10), cmd);
+    const retry = leaveQueue(first.day, ctxAt(T10 + 20_000), cmd);
+    assert.equal(retry.replayed, true);
+    assert.deepEqual(retry.result, first.result);
+    assert.deepEqual(retry.effects, []);
+    assert.equal(retry.day, first.day);
+
+    throwsCode(() => removeTicket(first.day, ctxAt(T10 + 30_000), { ...cmd, barberId: 'u1' }), 'request-conflict');
+  });
 });
 
 describe('callNext ("Próximo!")', () => {
   const next = (day: QueueDay, nowMs: number, barberId = 'ze', outcome: 'done' | 'no_show' = 'done') =>
-    callNext(day, ctxAt(nowMs), { requestId: uuid(), actorUid: barberId, barberId, outcome });
+    callNext(day, ctxAt(nowMs), advanceCmd(day, barberId, outcome));
 
   it('exige expediente iniciado e não pausado', () => {
     throwsCode(() => next(emptyDay(), T10), 'barber-not-on-shift');
@@ -218,6 +232,7 @@ describe('callNext ("Próximo!")', () => {
     const second = next(first.day, T10 + 25 * 60_000);
     assert.deepEqual(second.result.finished, { ticketId: 't-a', outcome: 'done' });
     assert.equal(second.result.called?.ticketId, 't-b');
+    assert.equal(second.day.barbers.ze?.currentTicketId, 't-b');
     assert.equal(ticketStatus(second.day, 't-a'), 'done');
     assert.deepEqual(second.effects, [{ type: 'activeTicket.clear', uid: 'a', ticketId: 't-a' }]);
     assert.deepEqual(second.stats.corte, [{ ticketId: 't-a', minutes: 25 }]);
@@ -240,12 +255,7 @@ describe('callNext ("Próximo!")', () => {
   it('informa a janela de desfazer configurada pela barbearia', () => {
     const quickUndo = { ...shop, settings: { ...shop.settings, undoWindowSec: 40 } };
     const day = join(openDay(), { uid: 'a', nowMs: T10 });
-    const outcome = callNext(day, ctxAt(T10, { shop: quickUndo }), {
-      requestId: uuid(),
-      actorUid: 'ze',
-      barberId: 'ze',
-      outcome: 'done',
-    });
+    const outcome = callNext(day, ctxAt(T10, { shop: quickUndo }), advanceCmd(day));
     assert.equal(outcome.result.undoWindowSec, 40);
   });
 
@@ -345,13 +355,8 @@ describe('finishCurrent', () => {
   it('finaliza sem chamar ninguém, mesmo com a fila cheia', () => {
     let day = openDay();
     for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
-    const outcome = finishCurrent(day, ctxAt(T10 + 20 * 60_000), {
-      requestId: uuid(),
-      actorUid: 'ze',
-      barberId: 'ze',
-      outcome: 'done',
-    });
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
+    const outcome = finishCurrent(day, ctxAt(T10 + 20 * 60_000), advanceCmd(day));
     assert.equal(outcome.result.called, null);
     assert.equal(ticketStatus(outcome.day, 't-b'), 'waiting');
     assert.equal(outcome.day.barbers.ze?.currentTicketId, null);
@@ -359,14 +364,14 @@ describe('finishCurrent', () => {
 
   it('exige atendimento em andamento', () => {
     throwsCode(
-      () => finishCurrent(openDay(), ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }),
+      () => finishCurrent(openDay(), ctxAt(T10), advanceCmd(openDay())),
       'nothing-to-finish',
     );
   });
 
   it('exige expediente iniciado', () => {
     throwsCode(
-      () => finishCurrent(emptyDay(), ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }),
+      () => finishCurrent(emptyDay(), ctxAt(T10), advanceCmd(emptyDay())),
       'barber-not-on-shift',
     );
   });
@@ -374,7 +379,7 @@ describe('finishCurrent', () => {
   it('recusa se o console mostra na cadeira alguém que não está mais lá', () => {
     let day = openDay();
     for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
     const finish = (current: QueueDay, expectedServingTicketId: string | null) =>
       finishCurrent(current, ctxAt(T10 + 60_000), {
         requestId: uuid(),
@@ -396,7 +401,7 @@ describe('finishCurrent', () => {
   it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
     let day = openDay();
     for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
     const cmd = { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done', expectedServingTicketId: 't-a' } as const;
 
     const first = finishCurrent(day, ctxAt(T10 + 60_000), cmd);
@@ -413,10 +418,10 @@ describe('undoLast', () => {
   function scenario(): { day: QueueDay; at: number } {
     let day = openDay();
     for (const uid of ['a', 'b']) day = join(day, { uid, nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
     const at2 = T10 + 25 * 60_000;
     const ctx = ctxAt(at2);
-    const outcome = callNext(day, ctx, { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' });
+    const outcome = callNext(day, ctx, advanceCmd(day));
     return { day: { ...outcome.day }, at: at2 };
   }
   const undo = (day: QueueDay, nowMs: number, stats = {}) =>
@@ -460,6 +465,32 @@ describe('undoLast', () => {
     const withNewcomer = join(day, { uid: 'c', nowMs: when });
     assert.doesNotThrow(() => undo(withNewcomer, when + 1000));
   });
+
+  it('recusa reabrir o atendimento de quem já voltou para a fila', () => {
+    // A foi finalizado e entrou de novo: reabrir o atendimento o deixaria com dois tickets ativos.
+    const { day, at: when } = scenario();
+    const rejoined = joinQueue(day, ctxAt(when + 1000), joinCmd({ actorUid: 'a', newTicketId: 't-a2' })).day;
+    throwsCode(() => undo(rejoined, when + 2000), 'undo-conflict');
+
+    // Se ele desiste do ticket novo, não há mais duplicidade e o desfazer volta a valer.
+    const left = leaveQueue(rejoined, ctxAt(when + 3000), { requestId: uuid(), actorUid: 'a', ticketId: 't-a2' }).day;
+    assert.equal(ticketStatus(undo(left, when + 4000).day, 't-a'), 'called');
+  });
+
+  it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
+    const { day, at: when } = scenario();
+    const cmd = { requestId: uuid(), actorUid: 'ze', barberId: 'ze' };
+
+    const first = undoLast(day, ctxAt(when + 1000), cmd);
+    // Sem a guarda de idempotência, esta segunda chamada seria recusada com `nothing-to-undo`.
+    const retry = undoLast(first.day, ctxAt(when + 2000), cmd);
+    assert.equal(retry.replayed, true);
+    assert.deepEqual(retry.result, first.result);
+    assert.deepEqual(retry.effects, []);
+    assert.equal(retry.day, first.day);
+
+    throwsCode(() => removeTicket(first.day, ctxAt(when + 3000), { ...cmd, ticketId: 't-b' }), 'request-conflict');
+  });
 });
 
 describe('removeTicket', () => {
@@ -478,11 +509,26 @@ describe('removeTicket', () => {
 
   it('não remove ticket já chamado', () => {
     let day = join(openDay(), { uid: 'a', nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
     throwsCode(
       () => removeTicket(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', ticketId: 't-a' }),
       'invalid-ticket-state',
     );
+  });
+
+  it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
+    const day = join(openDay(), { uid: 'troll', nowMs: T10 });
+    const cmd = { requestId: uuid(), actorUid: 'ze', barberId: 'ze', ticketId: 't-troll' };
+
+    const first = removeTicket(day, ctxAt(T10), cmd);
+    // Sem a guarda de idempotência, esta segunda chamada seria recusada com `invalid-ticket-state`.
+    const retry = removeTicket(first.day, ctxAt(T10 + 20_000), cmd);
+    assert.equal(retry.replayed, true);
+    assert.deepEqual(retry.result, first.result);
+    assert.deepEqual(retry.effects, []);
+    assert.equal(retry.day, first.day);
+
+    throwsCode(() => undoLast(first.day, ctxAt(T10 + 30_000), cmd), 'request-conflict');
   });
 });
 
@@ -492,15 +538,65 @@ describe('setBarberStatus', () => {
 
   it('não encerra o expediente com cliente em atendimento', () => {
     let day = join(openDay(), { uid: 'a', nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
     throwsCode(() => status(day, 'off'), 'finish-current-first');
     assert.doesNotThrow(() => status(day, 'paused'));
+  });
+
+  it('só o ticket que segue em atendimento impede encerrar o expediente', () => {
+    let day = join(openDay(), { uid: 'a', nowMs: T10 });
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
+
+    // Agregado inconsistente de propósito: o barbeiro aponta para um ticket que não existe.
+    const barbers = { ...day.barbers, ze: { ...day.barbers.ze!, currentTicketId: 't-sumiu' } };
+    const closed = status({ ...day, barbers }, 'off').day;
+
+    assert.equal(closed.barbers.ze?.status, 'off');
+    assert.equal(closed.barbers.ze?.currentTicketId, null);
   });
 
   it('preserva o início do status quando não muda', () => {
     const day = status(emptyDay(), 'available', T10).day;
     assert.equal(status(day, 'available', T10 + 60_000).day.barbers.ze?.statusSince, T10);
     assert.equal(status(day, 'paused', T10 + 60_000).day.barbers.ze?.statusSince, T10 + 60_000);
+  });
+
+  it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
+    const cmd = { requestId: uuid(), actorUid: 'ze', barberId: 'ze', displayName: 'Zé', status: 'paused' } as const;
+
+    const first = setBarberStatus(openDay(), ctxAt(T10), cmd);
+    const retry = setBarberStatus(first.day, ctxAt(T10 + 20_000), cmd);
+    assert.equal(retry.replayed, true);
+    assert.deepEqual(retry.result, first.result);
+    assert.equal(retry.day, first.day);
+
+    throwsCode(() => undoLast(first.day, ctxAt(T10 + 30_000), cmd), 'request-conflict');
+  });
+});
+
+describe('setAcceptingEntries', () => {
+  it('fecha e reabre a entrada, e quem já está na fila continua nela', () => {
+    const day = join(openDay(), { uid: 'a', nowMs: T10 });
+    const closed = setAcceptingEntries(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', accepting: false });
+    assert.deepEqual(closed.result, { accepting: false });
+    assert.equal(closed.day.acceptingEntries, false);
+    assert.equal(ticketStatus(closed.day, 't-a'), 'waiting');
+
+    const reopened = setAcceptingEntries(closed.day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', accepting: true });
+    assert.equal(reopened.day.acceptingEntries, true);
+    assert.doesNotThrow(() => joinQueue(reopened.day, ctxAt(T10), joinCmd()));
+  });
+
+  it('repetir o mesmo pedido devolve o resultado guardado; reusar o requestId em outro comando é recusado', () => {
+    const cmd = { requestId: uuid(), actorUid: 'ze', accepting: false };
+
+    const first = setAcceptingEntries(openDay(), ctxAt(T10), cmd);
+    const retry = setAcceptingEntries(first.day, ctxAt(T10 + 20_000), cmd);
+    assert.equal(retry.replayed, true);
+    assert.deepEqual(retry.result, first.result);
+    assert.equal(retry.day, first.day);
+
+    throwsCode(() => undoLast(first.day, ctxAt(T10 + 30_000), { ...cmd, barberId: 'ze' }), 'request-conflict');
   });
 });
 
@@ -518,7 +614,7 @@ describe('buildPublicQueue', () => {
   it('expõe posição, ETA e quem está sendo atendido sem vazar dados pessoais', () => {
     let day = openDay();
     for (const uid of ['a', 'b', 'c']) day = join(day, { uid, name: `Fulano ${uid} Silva`, nowMs: T10 });
-    day = callNext(day, ctxAt(T10), { requestId: uuid(), actorUid: 'ze', barberId: 'ze', outcome: 'done' }).day;
+    day = callNext(day, ctxAt(T10), advanceCmd(day)).day;
 
     const view = buildPublicQueue(day, ctxAt(T10 + 10 * 60_000));
     assert.equal(view.waitingCount, 2);

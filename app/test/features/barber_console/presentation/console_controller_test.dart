@@ -31,6 +31,12 @@ JsonMap queueWith(String status, {JsonMap? serving, int version = 7}) => publicQ
 /// Ticket nº 2 na cadeira do barbeiro do teste.
 JsonMap lucasServed() => {'ticketId': 't2', 'number': 2, 'label': 'Lucas M.', 'barberId': _me};
 
+/// Resposta do servidor a um avanço que só finalizou o ticket nº 2.
+JsonMap finishedLucas({String outcome = 'done'}) => {
+  'finished': {'ticketId': 't2', 'outcome': outcome},
+  'called': null,
+};
+
 /// Resposta do servidor a um "Próximo!" que chamou o ticket nº 2.
 JsonMap calledLucas({JsonMap? finished}) => {
   'finished': finished,
@@ -77,6 +83,16 @@ void main() {
   Future<void> letSettle(WidgetTester tester) async {
     await tester.pump(ConsoleController.confirmationTimeout);
     await tester.pump(ConsoleController.settleDelay);
+  }
+
+  /// Um "Próximo!" que esgota as tentativas sem resposta do servidor. Devolve o `requestId` usado.
+  Future<Object?> callNextUnanswered(WidgetTester tester) async {
+    backend.handler = (name, payload) => throw const CallableException('unavailable');
+    unawaited(controller().callNext());
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    return backend.calls.last.payload['requestId'];
   }
 
   group('expediente', () {
@@ -504,6 +520,9 @@ void main() {
       // O servidor tinha aplicado a primeira tentativa, e a tela já mostra Lucas na cadeira.
       docs.emit(_queue, queueWith('available', serving: lucasServed()));
       await tester.pump();
+      // Os botões descansam: o que aparece no lugar deles aponta para outra pessoa.
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
       backend.handler = (name, payload) => calledLucas();
       unawaited(controller().callNext());
       await tester.pump();
@@ -523,6 +542,315 @@ void main() {
       await tester.pump(ConsoleController.settleDelay);
     });
 
+    testConsole('o botão mudou de função depois da falha de rede: o toque repete o pedido antigo', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      backend.handler = (name, payload) => throw const CallableException('unavailable');
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      final sent = backend.calls.last.payload;
+
+      // O servidor tinha aplicado: Lucas está na cadeira, sem ninguém esperando, e o botão principal
+      // virou "Finalizar". Quem repete o toque ainda está reagindo à falha.
+      docs.emit(_queue, queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().finishCurrent());
+      await tester.pump();
+
+      expect(backend.calls.last.name, 'callNext');
+      expect(backend.calls.last.payload['requestId'], sent['requestId']);
+      // O replay é o que a tela já mostra: o console se acerta, sem esperar o limite.
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
+    });
+
+    testConsole('desfazer esquece o pedido que tinha ficado sem resposta', (tester) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => throw const CallableException('unavailable');
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      final sent = backend.calls.last.payload;
+
+      backend.handler = (name, payload) => null;
+      unawaited(controller().undoLast());
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], isNot(sent['requestId']));
+      await tester.pump(ConsoleController.settleDelay);
+    });
+
+    testConsole('pausar esquece o pedido que tinha ficado sem resposta', (tester) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => throw const CallableException('unavailable');
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      final sent = backend.calls.last.payload;
+
+      backend.handler = (name, payload) => null;
+      unawaited(controller().pause());
+      await tester.pump();
+      await tester.pump(ConsoleController.confirmationTimeout);
+      await tester.pump(ConsoleController.settleDelay);
+
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], isNot(sent['requestId']));
+      await tester.pump(ConsoleController.settleDelay);
+    });
+
+    testConsole('falha de rede retira o aviso do avanço anterior', (tester) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+      expect(state().lastAdvance, isNotNull);
+
+      backend.handler = (name, payload) => throw const CallableException('unavailable');
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(state().failure, isA<NetworkFailure>());
+      expect(state().lastAdvance, isNull);
+    });
+
+    testConsole('recusa clara do servidor encerra o pedido', (tester) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => throw const CallableException('permission-denied');
+      unawaited(controller().callNext());
+      await tester.pump();
+      final sent = backend.calls.last.payload;
+
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], isNot(sent['requestId']));
+    });
+
+    testConsole('repetição cujo resultado a tela não mostra não oferece desfazer', (tester) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => throw const CallableException('unavailable');
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+
+      // Outro aparelho avançou depois: a cadeira não é a do resultado que o replay vai devolver.
+      final other = {'ticketId': 't9', 'number': 9, 'label': 'Outro', 'barberId': _me};
+      docs.emit(_queue, queueWith('available', serving: other));
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+
+      expect(state().lastAdvance, isNull);
+      // Não há o que esperar da fila: ela nunca vai mostrar o resultado deste pedido.
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
+    });
+
+    testConsole('repetição aplicada antes de a fila chegar avisa e oferece desfazer', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      await callNextUnanswered(tester);
+
+      // A tela continua igual, e o servidor responde antes de a fila chegar.
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(state().lastAdvance?.result.called?.ticketId, 't2');
+      expect(state().pending, ConsoleAction.callNext);
+
+      docs.emit(_queue, queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
+      expect(state().lastAdvance, isNotNull);
+    });
+
+    testConsole('na repetição, o desfazer só fica pelo que resta desde a primeira tentativa', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      // A primeira tentativa consome 2 segundos até desistir.
+      await callNextUnanswered(tester);
+      await tester.pump(const Duration(seconds: 8));
+
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+
+      // Dos 15 segundos da janela, 10 já passaram desde o primeiro envio.
+      expect(state().lastAdvance?.undoFor, const Duration(seconds: 5));
+      await letSettle(tester);
+    });
+
+    testConsole('com a mesma cadeira, um comando diferente depois da falha é um pedido novo', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      final sent = await callNextUnanswered(tester);
+
+      backend.handler = (name, payload) => finishedLucas();
+      unawaited(controller().finishCurrent());
+      await tester.pump();
+
+      expect(backend.calls.last.name, 'finishCurrent');
+      expect(backend.calls.last.payload['requestId'], isNot(sent));
+      await letSettle(tester);
+    });
+
+    testConsole('"Não veio" depois da falha age sobre quem a tela mostra agora', (tester) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      final sent = await callNextUnanswered(tester);
+      docs.emit(_queue, queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+
+      backend.handler = (name, payload) => finishedLucas(outcome: 'no_show');
+      unawaited(controller().callNext(noShow: true));
+      await tester.pump();
+
+      expect(backend.calls.last.payload['requestId'], isNot(sent));
+      expect(backend.calls.last.payload, containsPair('outcome', 'no_show'));
+      expect(backend.calls.last.payload, containsPair('expectedServingTicketId', 't2'));
+      await letSettle(tester);
+    });
+
+    testConsole('repetição recusada porque a cadeira mudou mostra o motivo e encerra o pedido', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      final sent = await callNextUnanswered(tester);
+
+      backend.handler = (name, payload) => throw FakeCallables.domainError('serving-changed');
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], sent);
+      expect(state().failure, const QueueRuleFailure(QueueErrorCode.servingChanged));
+
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], isNot(sent));
+      await letSettle(tester);
+    });
+
+    testConsole('queda de rede que chega como erro inesperado mantém o pedido', (tester) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      backend.handler = (name, payload) => throw const CallableException('internal');
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(state().failure, isA<UnexpectedFailure>());
+      final sent = backend.calls.last.payload['requestId'];
+
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], sent);
+      await letSettle(tester);
+    });
+
+    testConsole('resposta ilegível encerra o pedido, retira o aviso e espera a tela mudar', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+      expect(state().lastAdvance, isNotNull);
+
+      // O servidor aplicou o avanço, mas o app não entende a resposta.
+      backend.handler = (name, payload) => {'called': 'ilegível'};
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(state().failure, isA<UnexpectedFailure>());
+      expect(state().lastAdvance, isNull);
+      final sent = backend.calls.last.payload['requestId'];
+
+      // Quando a cadeira muda, o botão aponta para outra pessoa: inerte por um instante.
+      final other = {'ticketId': 't9', 'number': 9, 'label': 'Outro', 'barberId': _me};
+      docs.emit(_queue, queueWith('available', serving: other));
+      await tester.pump();
+      expect(state().settling, isTrue);
+      await tester.pump(ConsoleController.settleDelay);
+
+      backend.handler = (name, payload) => {'finished': null, 'called': null};
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], isNot(sent));
+      await letSettle(tester);
+    });
+
+    testConsole('cada tentativa sem resposta renova o prazo de repetir o pedido', (tester) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      final sent = await callNextUnanswered(tester);
+
+      await tester.pump(ConsoleController.unansweredLifetime - const Duration(seconds: 1));
+      await callNextUnanswered(tester);
+      expect(backend.calls.last.payload['requestId'], sent);
+
+      // Contando da primeira tentativa, o prazo já teria passado.
+      await tester.pump(ConsoleController.unansweredLifetime - const Duration(seconds: 1));
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.payload['requestId'], sent);
+      await letSettle(tester);
+    });
+
+    testConsole('passados alguns segundos, o botão que mudou de função vale como decisão', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      final sent = await callNextUnanswered(tester);
+      docs.emit(_queue, queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      await tester.pump(ConsoleController.repeatedTapLifetime);
+
+      backend.handler = (name, payload) => finishedLucas();
+      unawaited(controller().finishCurrent());
+      await tester.pump();
+
+      expect(backend.calls.last.name, 'finishCurrent');
+      expect(backend.calls.last.payload['requestId'], isNot(sent));
+      expect(backend.calls.last.payload, containsPair('expectedServingTicketId', 't2'));
+      await letSettle(tester);
+    });
+
     testConsole('passado o prazo, o toque depois da falha de rede é um pedido novo', (
       tester,
     ) async {
@@ -539,6 +867,7 @@ void main() {
       await tester.pump(ConsoleController.unansweredLifetime);
       docs.emit(_queue, queueWith('available', serving: lucasServed()));
       await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
       backend.handler = (name, payload) => {'finished': null, 'called': null};
       unawaited(controller().callNext());
       await tester.pump();
@@ -807,6 +1136,26 @@ void main() {
       await tester.pump(ConsoleController.confirmationTimeout);
 
       expect(tester.takeException(), isNull);
+    });
+
+    testConsole('descartado no meio de um avanço que fica sem resposta, termina sem erro', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      backend
+        ..handler = ((name, payload) => throw const CallableException('unavailable'))
+        ..gate = Completer<void>();
+      final request = expectLater(controller().callNext(), completes);
+      await tester.pump();
+
+      container.dispose();
+      backend.gate!.complete();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+
+      await request;
     });
   });
 }
