@@ -7,28 +7,46 @@ name: Claude · revisão de PR
 #   (Para usar chave de API em vez da assinatura, troque a linha do token por:
 #    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }})
 
+# Sem filtro de pastas no `on:` de propósito. O check "Revisão · veredito" é obrigatório na main, e um
+# check obrigatório que nunca roda deixa o PR esperando para sempre. Quem decide se há o que revisar é
+# o job "escopo"; num PR só de documentação o veredito passa sem chamar a revisão.
+
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - "app/lib/**"
-      - "app/test/**"
-      - "app/pubspec.yaml"
-      - "functions/src/**"
-      - "functions/test/**"
-      - "functions/test-emulator/**"
-      - "functions/package.json"
-      - "firestore.rules"
-      - "firestore.indexes.json"
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
+  escopo:
+    name: Revisão · escopo
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      relevante: ${{ steps.arquivos.outputs.relevante }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: arquivos
+        # `shell: bash` liga o pipefail: se a listagem falhar, o job falha em vez de dizer "nada a revisar".
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Os dois nomes de um arquivo renomeado: sair da área revisada também é mudança.
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)' \
+            | node .github/scripts/escopo-revisao.mjs >> "$GITHUB_OUTPUT"
+
   review:
     name: Revisão
-    if: github.event.pull_request.draft == false
+    needs: escopo
+    if: needs.escopo.outputs.relevante == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -36,8 +54,8 @@ jobs:
       pull-requests: write
       id-token: write
     env:
-      # `secrets` não pode ser usado no `if` do job; sem o token os passos são pulados e o check
-      # fica verde, em vez de falhar em todo PR enquanto a revisão não estiver configurada.
+      # `secrets` não pode ser usado no `if` do job. Sem o token (PR de fork, por exemplo) os passos
+      # são pulados, este job fica verde e quem reprova é o "veredito", por falta de veredito.
       HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - name: Revisão não configurada
@@ -74,6 +92,34 @@ jobs:
             - Ao final, UM comentário geral com `gh pr comment` contendo: veredito (aprovar / ajustar antes do merge),
               lista dos achados por gravidade e o que não foi possível verificar.
             - Se não houver problemas relevantes, diga isso em uma frase no comentário geral. Não invente achados.
+            - A regra "VEREDITO:" dos agentes vale só para a sessão local; aqui, não escreva essa linha.
+              A última linha do comentário geral é este marcador, lido pelo check "Revisão · veredito",
+              com X trocado por sim (se houver achado [Crítico] ou [Alto]) ou nao (nos demais casos):
+              <!-- veredito-revisao sha=${{ github.event.pull_request.head.sha }} bloqueante=X -->
             - Só publique comentários no GitHub; não envie a revisão como mensagem.
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+
+  veredito:
+    name: Revisão · veredito
+    needs: [escopo, review]
+    # Roda sempre, mesmo com a revisão pulada ou com falha: é este check que decide, e ele reprova na
+    # dúvida. Num rascunho ele falha, de propósito: um job pulado contaria como aprovado no GitHub.
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confere o veredito
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          OWNER: ${{ github.repository_owner }}
+          ESCOPO: ${{ needs.escopo.result }}
+          RELEVANTE: ${{ needs.escopo.outputs.relevante }}
+        run: node .github/scripts/veredito-revisao.mjs

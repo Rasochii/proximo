@@ -25,6 +25,7 @@ function secretReason() {
 }
 
 function writeReason() {
+  if (parts[0] === '.git') return `${rel} é estado interno do git (inclui a trava de revisão).`;
   if (GENERATED_DART.test(name)) {
     return `${rel} é gerado pelo build_runner. Edite o arquivo-fonte e rode: cd app && dart run build_runner build --delete-conflicting-outputs`;
   }
