@@ -13,7 +13,9 @@ import type { BarberStatus, QueueDay } from './types';
 
 /**
  * Projeção pública da fila (`publicQueues/{shopId}`), lida em tempo real pelo cliente e pela TV.
- * Não contém UIDs, nomes completos nem telefones (LGPD — princípio da necessidade).
+ * Não contém UIDs de clientes, nomes completos nem telefones (LGPD — princípio da necessidade).
+ * Exceção a resolver antes do primeiro deploy: `barberId` é o UID do barbeiro, porque o console
+ * se reconhece por ele (ver "Decisões adiadas" em `docs/PLANO_DE_ACAO.md`).
  */
 export interface PublicQueue {
   readonly shopId: string;
@@ -61,6 +63,14 @@ export function buildPublicQueue(day: QueueDay, ctx: DayContext): PublicQueue {
   const etas = estimateDay(day, ctx);
   const called = calledTickets(day);
   const waiting = waitingTickets(day);
+  // Quem atende cada ticket, pela mesma definição que confere o avanço (`serving-changed`): se a
+  // projeção usasse outra fonte, uma divergência faria o console ser recusado para sempre.
+  const servingBarber = new Map(
+    Object.values(day.barbers).flatMap((barber) => {
+      const ticket = servingTicketOf(day, barber);
+      return ticket ? [[ticket.id, barber.id] as const] : [];
+    }),
+  );
 
   return {
     shopId: day.shopId,
@@ -77,7 +87,12 @@ export function buildPublicQueue(day: QueueDay, ctx: DayContext): PublicQueue {
         status: b.status,
         servingNumber: servingTicketOf(day, b)?.number ?? null,
       })),
-    nowServing: called.map((t) => ({ ticketId: t.id, number: t.number, label: t.label, barberId: t.calledBy })),
+    nowServing: called.map((t) => ({
+      ticketId: t.id,
+      number: t.number,
+      label: t.label,
+      barberId: servingBarber.get(t.id) ?? null,
+    })),
     waiting: waiting.map((t, index) => ({
       ticketId: t.id,
       number: t.number,
