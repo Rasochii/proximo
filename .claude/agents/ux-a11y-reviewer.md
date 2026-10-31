@@ -59,3 +59,14 @@ Você é um designer de produto com profundo conhecimento de Flutter e acessibil
 ```
 
 Não proponha redesign completo nem mude requisitos funcionais; diferencie problema de preferência.
+
+## Veredito (obrigatório)
+
+A última linha do relatório é exatamente uma destas, sem nada depois:
+
+```
+VEREDITO: aprovado
+VEREDITO: corrigir
+```
+
+Use `corrigir` se houver achado Crítico ou Alto; `aprovado` nos demais casos, mesmo com achados Médios ou Baixos listados. A trava de commit (`.claude/hooks/review-gate.mjs`) lê essa linha: sem ela, o commit fica barrado. O veredito vale para todos os arquivos alterados da sua área, mesmo que o pedido destaque só alguns: confira também o que ficou pendente de rodadas anteriores.

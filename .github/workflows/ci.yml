@@ -25,6 +25,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:coverage
+      - name: Regras da trava de revisão e do veredito
+        run: node --test ../.claude/hooks/review-rules.test.mjs ../.claude/hooks/review-gate.test.mjs ../.github/scripts/veredito-revisao.test.mjs
 
   emulators:
     name: Functions · regras e integração nos emuladores

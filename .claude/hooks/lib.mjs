@@ -45,7 +45,12 @@ export function run(command, cwd = ROOT) {
 
 /** Executa o git sem shell (git.exe existe em todas as plataformas; evita problemas de aspas e de %). */
 export function git(...args) {
-  const result = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+  return gitIn(ROOT, ...args);
+}
+
+/** O mesmo, em outro diretório (uma worktree, por exemplo). */
+export function gitIn(cwd, ...args) {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   return { ok: result.status === 0, stdout: result.stdout ?? '' };
 }
 
@@ -66,16 +71,24 @@ export function tail(text, lines = 60) {
 export const GENERATED_DART = /\.(g|freezed|gr|mocks)\.dart$/;
 export const L10N_GEN_DIR = 'app/lib/l10n/gen/';
 
-/** Arquivos com mudanças não commitadas (caminhos relativos à raiz, com "/"). */
-export function changedFiles() {
-  const status = git('status', '--porcelain=v1', '-uall');
+/**
+ * Arquivos com mudanças não commitadas (caminhos relativos à raiz, com "/"). Com `-z` o git não
+ * escapa acentos nem espaços. Com `renamedFrom`, um arquivo renomeado aparece também pelo nome antigo.
+ */
+export function changedFiles(root = ROOT, { renamedFrom = false } = {}) {
+  const status = gitIn(root, 'status', '--porcelain=v1', '-z', '-uall');
   if (!status.ok) return null;
-  return status.stdout
-    .split(/\r?\n/)
-    .filter((line) => line.length > 3)
-    .map((line) => line.slice(3).trim())
-    .map((path) => (path.includes(' -> ') ? path.split(' -> ').pop() : path))
-    .map((path) => path.replace(/^"(.*)"$/, '$1'));
+  const fields = status.stdout.split('\0').filter(Boolean);
+  const files = [];
+  for (let i = 0; i < fields.length; i += 1) {
+    const [x, y] = fields[i];
+    files.push(fields[i].slice(3));
+    if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
+      i += 1;
+      if (renamedFrom) files.push(fields[i]);
+    }
+  }
+  return files;
 }
 
 /** Conta mudanças por área do monorepo. */

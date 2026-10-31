@@ -1,0 +1,18 @@
+# Quem mexe nos portões de qualidade precisa da aprovação da conta dona do repositório (ADR 0008):
+# sem isso, um PR poderia enfraquecer o próprio check que o avalia. Vale também para as configurações
+# que fazem as invariantes do projeto serem cobradas.
+/.github/ @Rasochii
+/.githooks/ @Rasochii
+/.gitattributes @Rasochii
+/.claude/hooks/ @Rasochii
+/.claude/agents/ @Rasochii
+/.claude/settings.json @Rasochii
+/CLAUDE.md @Rasochii
+/app/CLAUDE.md @Rasochii
+/functions/CLAUDE.md @Rasochii
+/functions/package.json @Rasochii
+/functions/scripts/run-tests.mjs @Rasochii
+/functions/eslint.config.mjs @Rasochii
+/functions/tsconfig*.json @Rasochii
+/firebase.json @Rasochii
+/app/analysis_options.yaml @Rasochii
