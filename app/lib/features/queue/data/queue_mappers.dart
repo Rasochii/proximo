@@ -46,7 +46,9 @@ abstract final class QueueMappers {
   static AdvanceResult advanceResult(JsonMap json) {
     final finished = json.readMapOrNull('finished');
     final called = json.readMapOrNull('called');
+    final undoWindowSec = json.readIntOrNull('undoWindowSec');
     return AdvanceResult(
+      undoWindow: undoWindowSec == null ? null : Duration(seconds: undoWindowSec),
       finishedTicketId: finished?.readString('ticketId'),
       finishedOutcome: switch (finished?.readString('outcome')) {
         null => null,

@@ -38,6 +38,17 @@ function optionalId(payload: Payload, field: string): string | null {
   return payload[field] === undefined || payload[field] === null ? null : id(payload, field);
 }
 
+/**
+ * Campo obrigatório em que `null` é uma resposta ("nenhum"). Não enviar é erro: se a ausência
+ * valesse como "não sei", um cliente que perdesse o campo no caminho ficaria sem a conferência
+ * sem ninguém notar.
+ */
+function requiredNullableId(payload: Payload, field: string): string | null {
+  const value = payload[field];
+  if (value === undefined) throw new DomainError('invalid-argument', undefined, { field });
+  return value === null ? null : id(payload, field);
+}
+
 function oneOf<T extends string>(payload: Payload, field: string, allowed: readonly T[], fallback?: T): T {
   const value = payload[field] ?? fallback;
   if (typeof value !== 'string' || !(allowed as readonly string[]).includes(value)) {
@@ -90,11 +101,18 @@ export interface AdvanceInput {
   readonly requestId: string;
   readonly shopId: string;
   readonly outcome: FinishOutcome;
+  /** Quem o console mostra na cadeira do barbeiro: um ticket, ou `null` para ninguém. */
+  readonly expectedServingTicketId: string | null;
 }
 
 export function parseAdvanceInput(data: unknown): AdvanceInput {
   const p = asPayload(data);
-  return { requestId: requestId(p), shopId: id(p, 'shopId'), outcome: oneOf(p, 'outcome', FINISH_OUTCOMES, 'done') };
+  return {
+    requestId: requestId(p),
+    shopId: id(p, 'shopId'),
+    outcome: oneOf(p, 'outcome', FINISH_OUTCOMES, 'done'),
+    expectedServingTicketId: requiredNullableId(p, 'expectedServingTicketId'),
+  };
 }
 
 export interface ShopActionInput {

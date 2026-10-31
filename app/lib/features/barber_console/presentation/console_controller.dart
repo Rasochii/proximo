@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
+import 'package:proximo/core/config/clock.dart';
 import 'package:proximo/core/error/failure.dart';
+import 'package:proximo/core/error/queue_error_code.dart';
+import 'package:proximo/core/firebase/firebase_providers.dart';
 import 'package:proximo/core/result/result.dart';
 import 'package:proximo/features/queue/domain/public_queue.dart';
 import 'package:proximo/features/queue/domain/queue_repositories.dart';
@@ -34,17 +37,23 @@ enum ConsoleAction {
 /// O [id] distingue um aviso do seguinte, mesmo quando o resultado é igual.
 @immutable
 final class AdvanceNotice {
-  const AdvanceNotice({required this.id, required this.result});
+  const AdvanceNotice({required this.id, required this.result, required this.undoFor});
 
   final int id;
   final AdvanceResult result;
 
-  @override
-  bool operator ==(Object other) =>
-      other is AdvanceNotice && other.id == id && other.result == result;
+  /// Quanto restava da janela de desfazer quando o aviso foi oferecido pela primeira vez.
+  final Duration undoFor;
 
   @override
-  int get hashCode => Object.hash(id, result);
+  bool operator ==(Object other) =>
+      other is AdvanceNotice &&
+      other.id == id &&
+      other.result == result &&
+      other.undoFor == undoFor;
+
+  @override
+  int get hashCode => Object.hash(id, result, undoFor);
 }
 
 @immutable
@@ -85,6 +94,58 @@ final class ConsoleState {
       'lastAdvance: ${lastAdvance?.id})';
 }
 
+/// Um avanço como foi pedido: repeti-lo é mandar exatamente isto de novo.
+@immutable
+final class _AdvanceRequest {
+  const _AdvanceRequest({
+    required this.callAnother,
+    required this.noShow,
+    required this.requestId,
+    required this.servingTicketId,
+    required this.sentAt,
+    required this.triedAt,
+  });
+
+  final bool callAnother;
+  final bool noShow;
+  final String requestId;
+
+  /// Quem a tela mostrava na cadeira quando o barbeiro tocou.
+  final String? servingTicketId;
+
+  /// A primeira tentativa, de onde o app conta a janela de desfazer.
+  final DateTime sentAt;
+
+  /// O fim da última tentativa, de onde conta [ConsoleController.unansweredLifetime].
+  final DateTime triedAt;
+
+  _AdvanceRequest triedAgainAt(DateTime time) => _AdvanceRequest(
+    callAnother: callAnother,
+    noShow: noShow,
+    requestId: requestId,
+    servingTicketId: servingTicketId,
+    sentAt: sentAt,
+    triedAt: time,
+  );
+}
+
+extension on Failure? {
+  /// Se a falha quer dizer que o servidor pode ter aplicado o pedido sem a resposta chegar. No
+  /// navegador, uma queda de rede chega como erro inesperado.
+  bool get isNoAnswer => switch (this) {
+    NetworkFailure() => true,
+    UnexpectedFailure(:final cause) => cause is! FormatException,
+    _ => false,
+  };
+
+  /// O servidor respondeu que deu certo, num formato que o app não entende: o pedido foi aplicado,
+  /// e o app não sabe com qual resultado.
+  bool get isUnreadableAnswer => switch (this) {
+    UnexpectedFailure(:final cause) => cause is FormatException,
+    _ => false,
+  };
+}
+
 /// Comandos do barbeiro logado numa barbearia: expediente, "Próximo!", "Não veio" e desfazer.
 ///
 /// O controller só envia o pedido. O que a tela mostra vem da fila pública, atualizada pelo
@@ -106,13 +167,35 @@ class ConsoleController extends Notifier<ConsoleState> {
   /// Quanto os botões ficam inertes depois de a tela trocar de situação.
   static const settleDelay = Duration(milliseconds: 700);
 
-  /// Por quanto tempo o Desfazer fica em oferta depois de um avanço. É o padrão do servidor
-  /// (`undoWindowSec`), que ainda tolera alguns segundos a mais pela demora da rede. A barbearia
-  /// pode ter outro valor configurado; o app ainda não lê essa configuração.
+  /// Por quanto tempo o Desfazer fica em oferta quando o servidor não informa a janela da
+  /// barbearia no resultado do avanço: o padrão dele (`undoWindowSec`). O servidor ainda tolera
+  /// alguns segundos a mais pela demora da rede.
   static const undoWindow = Duration(seconds: 15);
+
+  /// Por quanto tempo, depois da última tentativa, um avanço sem resposta ainda é repetido como o
+  /// mesmo pedido. Depois disso o toque vale como intenção nova.
+  static const unansweredLifetime = Duration(minutes: 2);
+
+  /// Por quanto tempo, depois da última tentativa, o toque num botão que mudou de função ainda é
+  /// reação à falha. Bem mais curto que [unansweredLifetime]: passado isso, é o barbeiro decidindo
+  /// finalizar quem está na cadeira.
+  static const repeatedTapLifetime = Duration(seconds: 15);
 
   Timer? _timer;
   Timer? _undoExpiry;
+
+  /// Último avanço enviado que ficou sem resposta do servidor (falha de rede ou inesperada).
+  _AdvanceRequest? _unanswered;
+
+  /// O avanço em andamento.
+  late _AdvanceRequest _advance;
+
+  /// O avanço em andamento repete um pedido que tinha ficado sem resposta.
+  bool _advanceRepeats = false;
+
+  /// Depois de um avanço recusado porque a cadeira era outra, ou sem resposta: quem a tela mostrava
+  /// na cadeira. Fica guardado até a tela mudar.
+  ({String? servingTicketId})? _staleChair;
 
   /// Há um pedido a caminho do servidor, ainda sem resposta.
   bool _sending = false;
@@ -146,25 +229,102 @@ class ConsoleController extends Notifier<ConsoleState> {
   /// "Próximo!" ([noShow] falso) ou "Não veio": finaliza o atendimento atual e chama o seguinte.
   Future<void> callNext({bool noShow = false}) => _run<AdvanceResult>(
     noShow ? ConsoleAction.noShow : ConsoleAction.callNext,
-    () => _repository.callNext(
-      shopId: key.shopId,
-      outcome: noShow ? FinishOutcome.noShow : FinishOutcome.done,
-    ),
-    confirmed: (queue, result) =>
-        queue?.servedBy(key.barberId)?.ticketId == result.called?.ticketId,
+    () => _sendAdvance(callAnother: true, noShow: noShow),
+    confirmed: _queueResolves,
     onAccepted: _rememberAdvance,
   );
 
   /// Finaliza o atendimento atual sem chamar ninguém (fila vazia, ou antes de uma pausa).
   Future<void> finishCurrent({bool noShow = false}) => _run<AdvanceResult>(
     noShow ? ConsoleAction.noShow : ConsoleAction.finish,
-    () => _repository.finishCurrent(
-      shopId: key.shopId,
-      outcome: noShow ? FinishOutcome.noShow : FinishOutcome.done,
-    ),
-    confirmed: (queue, _) => queue?.servedBy(key.barberId) == null,
+    () => _sendAdvance(callAnother: false, noShow: noShow),
+    confirmed: _queueResolves,
     onAccepted: _rememberAdvance,
   );
+
+  /// Se a fila já não tem mais o que mostrar sobre este avanço: ou a cadeira é a que ele deixou
+  /// (vazia, se ele só finalizou), ou [_overtaken].
+  bool _queueResolves(PublicQueue? queue, AdvanceResult result) =>
+      queue?.servedBy(key.barberId)?.ticketId == result.called?.ticketId ||
+      _overtaken(queue, result);
+
+  /// Numa repetição, o resultado pode ser antigo. Se a cadeira não é nem a de quando o barbeiro
+  /// tocou nem a que o avanço deixou, algo aconteceu depois (em outro aparelho, por exemplo). Se ela
+  /// ainda é a de antes do toque, a fila só não chegou.
+  bool _overtaken(PublicQueue? queue, AdvanceResult result) {
+    if (!_advanceRepeats) return false;
+    final chair = queue?.servedBy(key.barberId)?.ticketId;
+    return chair != _advance.servingTicketId && chair != result.called?.ticketId;
+  }
+
+  /// Envia um avanço. Se o anterior ficou sem resposta (a rede caiu no meio), o toque seguinte repete
+  /// exatamente aquele pedido em vez de fazer um novo: se o servidor já o tinha aplicado, devolve o
+  /// mesmo resultado, e a fila não anda duas vezes por um toque que parecia ter falhado.
+  ///
+  /// Vale também por alguns segundos se a cadeira mudou desde o envio, mesmo que o comando agora seja
+  /// outro: o botão que dizia "Próximo!" pode virar "Finalizar" quando a fila chega, e quem repete o
+  /// toque ainda está reagindo à falha, não pedindo para finalizar quem acabou de ser chamado.
+  Future<Result<AdvanceResult>> _sendAdvance({
+    required bool callAnother,
+    required bool noShow,
+  }) async {
+    final now = ref.read(clockProvider)();
+    final kept = _unanswered;
+    final repeats = kept != null && _sameIntent(kept, callAnother, noShow, now);
+    final request =
+        (repeats ? kept : null) ??
+        _AdvanceRequest(
+          callAnother: callAnother,
+          noShow: noShow,
+          requestId: ref.read(requestIdGeneratorProvider)(),
+          servingTicketId: _servingTicketId,
+          sentAt: now,
+          triedAt: now,
+        );
+    _unanswered = request;
+    _advance = request;
+    _advanceRepeats = repeats;
+
+    final outcome = noShow ? FinishOutcome.noShow : FinishOutcome.done;
+    final result = request.callAnother
+        ? await _repository.callNext(
+            shopId: key.shopId,
+            servingTicketId: request.servingTicketId,
+            outcome: outcome,
+            requestId: request.requestId,
+          )
+        : await _repository.finishCurrent(
+            shopId: key.shopId,
+            servingTicketId: request.servingTicketId,
+            outcome: outcome,
+            requestId: request.requestId,
+          );
+    // O barbeiro saiu da tela no meio do pedido: não há mais o que atualizar.
+    if (!ref.mounted) return result;
+
+    final failure = result.failureOrNull;
+    final noAnswer = failure.isNoAnswer;
+    // Com uma resposta clara do servidor, o pedido está encerrado.
+    _unanswered = noAnswer ? request.triedAgainAt(ref.read(clockProvider)()) : null;
+    final mayHaveAdvanced = noAnswer || failure.isUnreadableAnswer;
+    if (mayHaveAdvanced) {
+      // O servidor guarda um desfazer por barbeiro, e este pedido pode ter tomado o lugar do
+      // anterior: o aviso que está na tela talvez já desfizesse outra coisa.
+      _withdrawUndo();
+    }
+    if (mayHaveAdvanced || failure == const QueueRuleFailure(QueueErrorCode.servingChanged)) {
+      _staleChair = (servingTicketId: request.servingTicketId);
+    }
+    return result;
+  }
+
+  /// Se o toque ainda é o pedido [kept], que ficou sem resposta, e não uma intenção nova.
+  bool _sameIntent(_AdvanceRequest kept, bool callAnother, bool noShow, DateTime now) {
+    if (kept.noShow != noShow) return false;
+    final waited = now.difference(kept.triedAt);
+    if (kept.callAnother == callAnother) return waited < unansweredLifetime;
+    return waited < repeatedTapLifetime && _servingTicketId != kept.servingTicketId;
+  }
 
   /// Desfaz o último "Próximo!", "Finalizar" ou "Não veio" deste barbeiro.
   ///
@@ -175,12 +335,15 @@ class ConsoleController extends Notifier<ConsoleState> {
     if (_sending) {
       // Outro pedido ainda está a caminho. O toque já tirou o aviso da tela; ele volta, para o
       // barbeiro tentar de novo em vez de achar que desfez.
-      if (advance != null) _offerUndo(advance.result);
+      if (advance != null) _offerUndo(advance.result, undoFor: advance.undoFor);
       return Future<void>.value();
     }
     _timer?.cancel();
     _timer = null;
     _confirmed = null;
+    _staleChair = null;
+    // O barbeiro mudou de assunto: um reenvio agora seria um replay de algo que ele já desfez.
+    _unanswered = null;
     state = ConsoleState(lastAdvance: advance);
 
     return _run<void>(
@@ -198,9 +361,16 @@ class ConsoleController extends Notifier<ConsoleState> {
 
   PublicQueue? get _queue => ref.read(publicQueueProvider(key.shopId)).value;
 
+  /// Quem a tela mostra na cadeira deste barbeiro. Vai junto com cada avanço: se o servidor vir
+  /// outra pessoa lá, recusa em vez de finalizar quem o barbeiro não está vendo.
+  String? get _servingTicketId => _queue?.servedBy(key.barberId)?.ticketId;
+
   Future<void> _setStatus(ConsoleAction action, BarberStatus status) => _run<void>(
     action,
-    () => _repository.setBarberStatus(shopId: key.shopId, status: status),
+    () {
+      _unanswered = null; // o barbeiro mudou de assunto: o próximo avanço é uma intenção nova
+      return _repository.setBarberStatus(shopId: key.shopId, status: status);
+    },
     // A fila pública só lista quem está em expediente: fora dela é "fora do expediente".
     confirmed: (queue, _) => (queue?.statusOf(key.barberId) ?? BarberStatus.off) == status,
   );
@@ -208,17 +378,29 @@ class ConsoleController extends Notifier<ConsoleState> {
   void _rememberAdvance(AdvanceResult result) {
     // Fila vazia e ninguém na cadeira: o servidor não fez nada, então não há o que desfazer.
     if (result.called == null && result.finishedTicketId == null) return;
-    _offerUndo(result);
-    _undoExpiry?.cancel();
-    _undoExpiry = Timer(undoWindow, () {
+
+    // A janela conta de quando o servidor aplicou o avanço. O app não conhece esse instante e usa
+    // o do envio, que é anterior: numa resposta atrasada (rede lenta, ou a repetição de um pedido
+    // que tinha ficado sem resposta) oferece menos tempo, ou nada, em vez de um "Desfazer" que o
+    // servidor já não aceita.
+    final elapsed = ref.read(clockProvider)().difference(_advance.sentAt);
+    final remaining = (result.undoWindow ?? undoWindow) - elapsed;
+    // O servidor guarda um desfazer por barbeiro: o deste avanço substituiu o do anterior.
+    _withdrawUndo();
+    if (remaining <= Duration.zero) return;
+    // Se algo aconteceu depois, o desfazer guardado no servidor já não é o deste avanço.
+    if (_overtaken(_queue, result)) return;
+
+    _offerUndo(result, undoFor: remaining);
+    _undoExpiry = Timer(remaining, () {
       _undoExpiry = null;
       if (ref.mounted) _setAdvance(null);
     });
   }
 
   /// Põe (ou repõe) o aviso com "Desfazer" na tela. O prazo continua sendo o do avanço original.
-  void _offerUndo(AdvanceResult result) =>
-      _setAdvance(AdvanceNotice(id: ++_notices, result: result));
+  void _offerUndo(AdvanceResult result, {required Duration undoFor}) =>
+      _setAdvance(AdvanceNotice(id: ++_notices, result: result, undoFor: undoFor));
 
   void _withdrawUndo() {
     _undoExpiry?.cancel();
@@ -244,7 +426,7 @@ class ConsoleController extends Notifier<ConsoleState> {
     if (failure is QueueRuleFailure) {
       _withdrawUndo();
     } else {
-      _offerUndo(advance.result);
+      _offerUndo(advance.result, undoFor: advance.undoFor);
     }
   }
 
@@ -255,6 +437,7 @@ class ConsoleController extends Notifier<ConsoleState> {
     void Function(T result)? onAccepted,
   }) async {
     if (state.busy) return;
+    _staleChair = null;
     state = ConsoleState(pending: action, lastAdvance: state.lastAdvance);
     Result<T>? result;
     _sending = true;
@@ -271,6 +454,8 @@ class ConsoleController extends Notifier<ConsoleState> {
     switch (result) {
       case Err<T>(:final failure):
         _fail(action, failure);
+        // A tela pode já ter mudado enquanto o servidor recusava.
+        _onQueue(_queue);
       case Ok<T>(:final value):
         onAccepted?.call(value);
         // O servidor aceitou. A fila pode já ter chegado com o efeito; senão, espera por ela.
@@ -284,15 +469,25 @@ class ConsoleController extends Notifier<ConsoleState> {
   }
 
   void _onQueue(PublicQueue? queue) {
-    if (_confirmed?.call(queue) ?? false) _settle();
+    if (_confirmed?.call(queue) ?? false) return _settle();
+
+    // O avanço foi recusado ou ficou sem resposta, e agora a tela mostra outra pessoa na cadeira. O
+    // botão reaparece no mesmo lugar apontando para ela: fica inerte um instante, para o toque
+    // repetido de quem tem pressa não agir sobre quem ele ainda não viu. O motivo da falha continua
+    // à vista.
+    final stale = _staleChair;
+    if (stale != null && queue?.servedBy(key.barberId)?.ticketId != stale.servingTicketId) {
+      _settle();
+    }
   }
 
   void _settle() {
     _confirmed = null;
-    state = ConsoleState(settling: true, lastAdvance: state.lastAdvance);
+    _staleChair = null;
+    state = ConsoleState(settling: true, failure: state.failure, lastAdvance: state.lastAdvance);
     _restartTimer(
       settleDelay,
-      () => state = ConsoleState(lastAdvance: state.lastAdvance),
+      () => state = ConsoleState(failure: state.failure, lastAdvance: state.lastAdvance),
     );
   }
 

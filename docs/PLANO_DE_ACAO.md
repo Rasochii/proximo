@@ -142,6 +142,18 @@ Legenda de tamanho: **P** ≈ 1–3 dias · **M** ≈ 1 semana · **G** ≈ 2 se
 ### Depois (backlog)
 Agendamento híbrido, WhatsApp, Pix, fidelidade, métricas avançadas, Live Activities, geofence.
 
+### Decisões adiadas
+Pontos conhecidos e deixados de fora de propósito na F3, com o motivo. Os dois primeiros precisam estar resolvidos antes do primeiro deploy real.
+
+| Ponto | Por que ficou | Quando resolver |
+|---|---|---|
+| `publicQueues` traz o UID do barbeiro (`barbers[].id`, `nowServing[].barberId` e `waiting[].preferredBarberId`), e a invariante 6 diz que UID fica no agregado. | Já existia, e o console se reconhece por esse campo. Corrigir é escolher entre um identificador opaco e um ADR aceitando o UID da equipe. | Antes do primeiro deploy |
+| Backend e app precisam sair juntos: sem `expectedServingTicketId`, a callable recusa com `invalid-argument`, e um console antigo para de avançar a fila. | Até aqui só rodamos nos emuladores. | No primeiro deploy e em toda mudança de contrato |
+| `undoLast` não confere qual avanço está desfazendo. Com dois aparelhos, o toque em um pode desfazer o avanço feito no outro. | Exige mudar o contrato e o app, e o risco cabe na janela de desfazer. | Mudança própria, ainda na F3 ou na F6 |
+| O servidor não informa quanto resta da janela de desfazer (`undoRemainingMs`). Uma repetição aplicada tarde pode ficar sem o aviso. | O app conta do envio e erra para menos, o que é seguro. | Quando houver reclamação de uso ou na F6 |
+| Desfazer pode reabrir o atendimento de quem já entrou em outra barbearia dentro da janela. `activeTickets` continua apontando para a outra, e o cliente não vê o ticket reaberto. | Resolver exige ler o `activeTickets` do cliente na transação, e hoje só o do ator é lido. Não corrompe dados. | F5, quando existir mais de uma barbearia |
+| Barbeiro desativado (`members/{uid}.active = false`) deixa o cliente na cadeira sem ninguém que possa finalizar. | Depende do fluxo de equipe. | F6, com uma ação do dono para assumir a cadeira |
+
 ## 4. Definição de pronto (vale para toda tarefa)
 1. `flutter analyze` / `npm run lint` sem avisos.
 2. Testes novos para toda regra de negócio; domínio com cobertura ≥ 90%.

@@ -90,6 +90,7 @@
   "errorBarberNotOnShift": "Inicie o expediente antes de chamar clientes.",
   "errorBarberNotAvailable": "Seu expediente está pausado.",
   "errorFinishCurrentFirst": "Finalize o atendimento atual primeiro.",
+  "errorServingChanged": "A fila mudou. Confira quem está na cadeira.",
   "errorPermission": "Você não tem permissão para fazer isso.",
   "errorAccountDisabled": "Esta conta está desativada. Fale com o dono da barbearia.",
   "loginTitle": "Entrar como barbeiro",

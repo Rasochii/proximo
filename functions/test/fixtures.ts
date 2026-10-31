@@ -2,8 +2,11 @@ import {
   createQueueDay,
   DEFAULT_SHOP_SETTINGS,
   joinQueue,
+  servingTicketOf,
   setBarberStatus,
+  type AdvanceCommand,
   type DayContext,
+  type FinishOutcome,
   type QueueDay,
   type ServiceStats,
   type Shop,
@@ -64,6 +67,18 @@ export function withBarbers(day: QueueDay, nowMs: number, ...ids: string[]): Que
       }).day,
     day,
   );
+}
+
+/** Um avanço vindo de um console em dia: diz na cadeira exatamente quem está nela. */
+export function advanceCmd(day: QueueDay, barberId = 'ze', outcome: FinishOutcome = 'done'): AdvanceCommand {
+  const barber = day.barbers[barberId];
+  return {
+    requestId: uuid(),
+    actorUid: barberId,
+    barberId,
+    outcome,
+    expectedServingTicketId: (barber && servingTicketOf(day, barber)?.id) ?? null,
+  };
 }
 
 export interface JoinOptions {

@@ -26,7 +26,19 @@ describe('validação das callables', () => {
       source: 'link',
       preferredBarberId: null,
     });
-    assert.equal(parseAdvanceInput({ requestId, shopId: 'ze' }).outcome, 'done');
+    assert.equal(parseAdvanceInput({ requestId, shopId: 'ze', expectedServingTicketId: null }).outcome, 'done');
+  });
+
+  it('no avanço da fila, exige dizer quem está na cadeira: um ticket ou ninguém', () => {
+    assert.equal(parseAdvanceInput({ requestId, shopId: 'ze', expectedServingTicketId: null }).expectedServingTicketId, null);
+    assert.equal(parseAdvanceInput({ requestId, shopId: 'ze', expectedServingTicketId: 't1' }).expectedServingTicketId, 't1');
+    // Ausente não vale como "ninguém": um cliente que perdesse o campo ficaria sem a conferência.
+    assert.throws(
+      () => parseAdvanceInput({ requestId, shopId: 'ze' }),
+      (e: unknown) => e instanceof DomainError && e.code === 'invalid-argument' && e.details?.field === 'expectedServingTicketId',
+    );
+    invalid(() => parseAdvanceInput({ requestId, shopId: 'ze', expectedServingTicketId: 42 }));
+    invalid(() => parseAdvanceInput({ requestId, shopId: 'ze', expectedServingTicketId: 'a/b' }));
   });
 
   it('normaliza o requestId para minúsculas', () => {
@@ -39,7 +51,7 @@ describe('validação das callables', () => {
     invalid(() => parseJoinQueueInput({ requestId: 'abc', shopId: 'ze', serviceId: 'corte' }));
     invalid(() => parseJoinQueueInput({ requestId, shopId: '../shops', serviceId: 'corte' }));
     invalid(() => parseJoinQueueInput({ requestId, shopId: 'ze', serviceId: 'corte', source: 'hack' }));
-    invalid(() => parseAdvanceInput({ requestId, shopId: 'ze', outcome: 'cancelled' }));
+    invalid(() => parseAdvanceInput({ requestId, shopId: 'ze', expectedServingTicketId: null, outcome: 'cancelled' }));
     invalid(() => parseBarberStatusInput({ requestId, shopId: 'ze', status: 'busy' }));
     invalid(() => parseAcceptingEntriesInput({ requestId, shopId: 'ze', accepting: 'yes' }));
     invalid(() => parseTicketInput({ requestId, shopId: 'ze', ticketId: 'x'.repeat(65) }));

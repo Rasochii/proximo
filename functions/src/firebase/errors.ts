@@ -14,6 +14,7 @@ const HTTPS_CODE_BY_DOMAIN_CODE: Partial<Record<DomainErrorCode, FunctionsErrorC
   'queue-full': 'resource-exhausted',
   'rate-limited': 'resource-exhausted',
   'request-conflict': 'already-exists',
+  'serving-changed': 'aborted',
   'undo-conflict': 'aborted',
   'day-mismatch': 'internal',
 };

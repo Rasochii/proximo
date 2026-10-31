@@ -103,19 +103,29 @@ final class CalledTicket {
 /// Resultado de `callNext`/`finishCurrent`.
 @immutable
 final class AdvanceResult {
-  const AdvanceResult({this.finishedTicketId, this.finishedOutcome, this.called});
+  const AdvanceResult({
+    this.finishedTicketId,
+    this.finishedOutcome,
+    this.called,
+    this.undoWindow,
+  });
 
   final String? finishedTicketId;
   final FinishOutcome? finishedOutcome;
   final CalledTicket? called;
+
+  /// Por quanto tempo o servidor aceita desfazer este avanço (configuração da barbearia).
+  /// `null` se o servidor não informou.
+  final Duration? undoWindow;
 
   @override
   bool operator ==(Object other) =>
       other is AdvanceResult &&
       other.finishedTicketId == finishedTicketId &&
       other.finishedOutcome == finishedOutcome &&
-      other.called == called;
+      other.called == called &&
+      other.undoWindow == undoWindow;
 
   @override
-  int get hashCode => Object.hash(finishedTicketId, finishedOutcome, called);
+  int get hashCode => Object.hash(finishedTicketId, finishedOutcome, called, undoWindow);
 }
