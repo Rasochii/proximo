@@ -33,6 +33,7 @@ Plano completo em `docs/PLANO_DE_ACAO.md` · decisões em `docs/adr/` · regras 
 | Functions: verificação | `cd functions && npm run typecheck && npm run lint && npm test` |
 | Functions: cobertura do domínio (meta ≥ 90%) | `cd functions && npm run test:coverage` |
 | Rules e concorrência (precisa de Java 21) | `cd functions && npm run test:emulator` |
+| Trava de revisão e veredito | `node --test .claude/hooks/review-rules.test.mjs .claude/hooks/review-gate.test.mjs .github/scripts/veredito-revisao.test.mjs` |
 | Emuladores e seed | skill `rodar-local` |
 
 O CI (`.github/workflows/ci.yml`) roda exatamente esses comandos.
@@ -49,7 +50,8 @@ O CI (`.github/workflows/ci.yml`) roda exatamente esses comandos.
 - Faça mudanças pequenas e verificáveis. Não refatore fora do escopo nem adicione dependência sem justificar custo e alternativas.
 - Discorde quando houver solução mais simples ou mais segura, explicando o trade-off. Não mude requisito funcional por iniciativa própria.
 - Nunca diga que testou ou compilou sem ter rodado. Ao terminar, diga o que foi verificado e o que não foi.
-- Antes de commitar, use os revisores: `flutter-reviewer` para `app/`, `backend-reviewer` para `functions/` e `firestore.rules`, e `ux-a11y-reviewer` para telas novas. Testes faltando ficam com o `test-engineer`.
+- Antes de commitar, use os revisores: `flutter-reviewer` para `app/`, `backend-reviewer` para `functions/` e `firestore.rules`, e `ux-a11y-reviewer` para telas. Testes faltando ficam com o `test-engineer`.
+- A trava de revisão (`.githooks/pre-commit`, ADR 0008) barra o commit se faltar aprovação para o conteúdo gravado: alterar um arquivo depois da revisão exige revisar de novo. Só uma pessoa libera: pulando o hook no terminal dela, ou com `/contestar <commit>` pela conta dona do repositório. Nunca contorne.
 - Antes de começar uma fase ou feature grande, quebre o trabalho em tarefas com a skill `planejar-fase`.
 - Para fechar uma tarefa (checklist, commit, ADR), use a skill `fechar-tarefa`.
 - Servidores MCP (`.mcp.json`): `dart` serve para análise, testes e inspeção do app rodando; `firebase` serve para Firestore, Auth, Functions e rules. Prefira-os a comandos soltos quando estiverem conectados.

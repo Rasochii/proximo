@@ -25,6 +25,7 @@ Se algum comando não puder rodar (ex.: sem Java), registre isso no resumo final
 - `app/` → agente `flutter-reviewer`; telas → `ux-a11y-reviewer`.
 - `functions/` ou `firestore.rules` → `backend-reviewer`.
 - Corrija achados Crítico/Alto. Médio/Baixo: corrija ou liste para o usuário decidir.
+- A trava de commit (`.githooks/pre-commit`) exige `VEREDITO: aprovado` para o conteúdo final (ADR 0008): faça a última rodada depois da última alteração.
 
 ## 3. Definição de pronto
 
@@ -40,6 +41,7 @@ Se algum comando não puder rodar (ex.: sem Java), registre isso no resumo final
 - **README.md**: status da fase na tabela de Roadmap; instruções de execução.
 - **docs/PLANO_DE_ACAO.md**: modelo de dados, ciclo do ticket, escopo de fase.
 - **CLAUDE.md** raiz: seção "Estado atual" quando uma peça de infra nova passa a existir.
+- **`estudo/`** (só nesta máquina, fora do git): toda decisão técnica relevante entra no capítulo da fase, com o que foi decidido, por quê, a alternativa descartada e o custo.
 - **ADR** quando uma decisão arquitetural é tomada ou revertida: `docs/adr/NNNN-titulo-em-kebab.md`, próximo número livre, formato dos existentes:
 
 ```markdown

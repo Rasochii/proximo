@@ -1,0 +1,20 @@
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "Functions · typecheck, lint e testes",
+      "Functions · regras e integração nos emuladores",
+      "App · análise e testes",
+      "Revisão · veredito"
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "require_code_owner_reviews": true,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}

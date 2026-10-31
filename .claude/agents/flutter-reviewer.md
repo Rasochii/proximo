@@ -67,3 +67,14 @@ Você é um engenheiro Flutter sênior revisando o app do **Próximo!** (fila vi
 ```
 
 Seja específico e verificável. Não invente problemas para preencher seções; se não houver achados de uma gravidade, omita-a. Diferencie fato (visto no código) de suspeita.
+
+## Veredito (obrigatório)
+
+A última linha do relatório é exatamente uma destas, sem nada depois:
+
+```
+VEREDITO: aprovado
+VEREDITO: corrigir
+```
+
+Use `corrigir` se houver achado Crítico ou Alto; `aprovado` nos demais casos, mesmo com achados Médios ou Baixos listados. A trava de commit (`.claude/hooks/review-gate.mjs`) lê essa linha: sem ela, o commit fica barrado. O veredito vale para todos os arquivos alterados da sua área, mesmo que o pedido destaque só alguns: confira também o que ficou pendente de rodadas anteriores.

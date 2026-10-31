@@ -9,6 +9,9 @@ import { changedFiles, countByArea, currentPhase, git, readInput, ROOT, VERIFY_C
 const input = await readInput();
 const lines = ['## Contexto do repositório (gerado pelo hook SessionStart)'];
 
+// A trava de commit mora em .githooks, e esse apontamento é por clone (ADR 0008).
+if (existsSync(join(ROOT, '.githooks'))) git('config', 'core.hooksPath', '.githooks');
+
 // Git: branch, sincronia com o remoto, mudanças e últimos commits.
 const branch = git('branch', '--show-current').stdout.trim() || '(HEAD destacado)';
 const sync = git('rev-list', '--left-right', '--count', '@{upstream}...HEAD');
