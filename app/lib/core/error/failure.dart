@@ -27,6 +27,23 @@ final class QueueRuleFailure extends Failure {
   String toString() => 'QueueRuleFailure(${code.wire})';
 }
 
+/// A pessoa que o barbeiro tentou remover já não está esperando: foi chamada ou saiu um instante
+/// antes. É rotina numa fila ao vivo, por isso tem mensagem própria. Número e rótulo são o que a
+/// fila pública já mostra a todos.
+final class TicketGoneFailure extends Failure {
+  const TicketGoneFailure({required this.number, required this.label});
+
+  final int number;
+  final String label;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TicketGoneFailure && other.number == number && other.label == label;
+
+  @override
+  int get hashCode => Object.hash(number, label);
+}
+
 /// Sem conexão ou servidor indisponível (já foram feitas novas tentativas).
 final class NetworkFailure extends Failure {
   const NetworkFailure();

@@ -6,6 +6,7 @@ import 'package:proximo/l10n/gen/app_localizations.dart';
 extension FailureMessages on AppLocalizations {
   String failureMessage(Failure failure) => switch (failure) {
     QueueRuleFailure(:final code) => queueErrorMessage(code),
+    TicketGoneFailure(:final number, :final label) => errorTicketGone(number, label),
     NetworkFailure() => networkError,
     PermissionFailure() || UnauthenticatedFailure() => errorPermission,
     AccountDisabledFailure() => errorAccountDisabled,
@@ -29,11 +30,11 @@ extension FailureMessages on AppLocalizations {
     QueueErrorCode.finishCurrentFirst => errorFinishCurrentFirst,
     QueueErrorCode.servingChanged => errorServingChanged,
     QueueErrorCode.notTicketOwner => errorPermission,
+    QueueErrorCode.ticketNotFound ||
+    QueueErrorCode.invalidTicketState ||
     QueueErrorCode.invalidArgument ||
     QueueErrorCode.invalidService ||
     QueueErrorCode.invalidSchedule ||
-    QueueErrorCode.ticketNotFound ||
-    QueueErrorCode.invalidTicketState ||
     QueueErrorCode.barberNotFound ||
     QueueErrorCode.nothingToFinish ||
     QueueErrorCode.nothingToUndo ||

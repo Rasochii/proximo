@@ -104,6 +104,7 @@ Legenda de tamanho: **P** ≈ 1–3 dias · **M** ≈ 1 semana · **G** ≈ 2 se
 - **Minhas barbearias:** o app lembra as barbearias em que a pessoa já esteve (guardadas no aparelho, sem exigir conta; com conta, acompanham a pessoa em outros aparelhos). A tela inicial passa a mostrá-las com o movimento atual, para entrar na fila de casa com um toque.
 - **Convite para instalar o app** na versão web da fila, num aviso dispensável. Enquanto não houver app publicado nas lojas, o convite é "adicionar à tela inicial" (PWA).
 - Tela de posição em tempo real: posição em destaque, faixa de ETA, linha do tempo de status, "Sair da fila".
+- "Sair da fila" com rede ruim: `leaveQueue` não reaproveita o `requestId` entre toques. Quem saiu sem receber a resposta e toca de novo recebe `invalid-ticket-state`, que hoje vira a mensagem genérica. O controller do cliente deve tratar esse código e `ticket-not-found` como "já saiu".
 - Estados: entrada fechada, fora do horário, fila vazia, "é sua vez!".
 - **Excluir meus dados** (LGPD + exigência das lojas): callable que anonimiza tickets e apaga a conta anônima.
 - Decidir o que acontece quando um cliente com ticket ativo abre o login da equipe: o login por e-mail substitui a sessão anônima, e o cliente perderia a posição e o "Sair da fila". Hoje nada cria sessão anônima, então o risco só começa nesta fase.
@@ -152,6 +153,8 @@ Pontos conhecidos e deixados de fora de propósito na F3, com o motivo. Os dois 
 | `undoLast` não confere qual avanço está desfazendo. Com dois aparelhos, o toque em um pode desfazer o avanço feito no outro. | Exige mudar o contrato e o app, e o risco cabe na janela de desfazer. | Mudança própria, ainda na F3 ou na F6 |
 | O servidor não informa quanto resta da janela de desfazer (`undoRemainingMs`). Uma repetição aplicada tarde pode ficar sem o aviso. | O app conta do envio e erra para menos, o que é seguro. | Quando houver reclamação de uso ou na F6 |
 | Desfazer pode reabrir o atendimento de quem já entrou em outra barbearia dentro da janela. `activeTickets` continua apontando para a outra, e o cliente não vê o ticket reaberto. | Resolver exige ler o `activeTickets` do cliente na transação, e hoje só o do ator é lido. Não corrompe dados. | F5, quando existir mais de uma barbearia |
+| Celular deitado com letra em dobro em tela muito baixa (640×360 e 568×320): o motivo de uma recusa fica em parte cortado e exige rolar a barra. | O botão principal e o Desfazer têm prioridade, e os dois continuam à vista. | F3, com o layout tablet |
+| Suspeita, por cálculo: com o celular deitado e letra em dobro, o aviso "Anterior não veio. Chamado: …" pode ocupar três linhas e passar da reserva de duas. | Não foi reproduzida. A saída seria encurtar o texto ou limitar as linhas do aviso. | F3, com o layout tablet |
 | Barbeiro desativado (`members/{uid}.active = false`) deixa o cliente na cadeira sem ninguém que possa finalizar. | Depende do fluxo de equipe. | F6, com uma ação do dono para assumir a cadeira |
 
 ## 4. Definição de pronto (vale para toda tarefa)

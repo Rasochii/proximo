@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,10 +14,24 @@ import 'package:proximo/features/queue/presentation/queue_providers.dart';
 import 'package:proximo/features/queue/presentation/widgets/queue_sections.dart';
 import 'package:proximo/l10n/gen/app_localizations.dart';
 
-/// A barra de ação existe quando há o que fazer nela: em expediente, ou em pausa com alguém na
-/// cadeira para terminar.
-bool _showsActionBar(BarberStatus status, ServingTicket? serving) =>
+/// A barra de baixo tem botões quando há o que fazer nela: em expediente, ou em pausa com alguém na
+/// cadeira para terminar. Sem botões, ela só aparece para mostrar o motivo de uma recusa.
+bool _hasActionButtons(BarberStatus status, ServingTicket? serving) =>
     status == BarberStatus.available || (status == BarberStatus.paused && serving != null);
+
+/// O motivo de uma recusa aparece perto de onde o barbeiro tocou. Sem botões na barra, o que veio do
+/// cartão fica no cartão. O resto vai para a barra: a remoção e o "Reabrir entrada" saem da lista,
+/// que pode estar rolada, e o Desfazer sai do aviso que fica logo acima dela.
+bool _failureOnCard(ConsoleState console, BarberStatus status, ServingTicket? serving) =>
+    !_hasActionButtons(status, serving) &&
+    switch (console.failedAction) {
+      ConsoleAction.startShift ||
+      ConsoleAction.resume ||
+      ConsoleAction.pause ||
+      ConsoleAction.endShift ||
+      ConsoleAction.closeEntries => true,
+      _ => false,
+    };
 
 /// Console de uma barbearia para o barbeiro [barberId]: o expediente dele e a fila ao vivo.
 ///
@@ -158,6 +175,8 @@ class _ConsoleBody extends StatelessWidget {
               consoleKey: consoleKey,
               status: queue?.statusOf(barberId) ?? BarberStatus.off,
               serving: queue?.servedBy(barberId),
+              entriesClosed: queue?.entriesClosedByStaff ?? false,
+              hasQueue: queue != null,
             ),
             if (servedByOthers.isNotEmpty) ...[
               const SizedBox(height: Insets.lg),
@@ -167,8 +186,17 @@ class _ConsoleBody extends StatelessWidget {
               const SizedBox(height: Insets.lg),
               // O título já diz quantos esperam ("Ninguém esperando", "3 pessoas esperando").
               // As linhas ficam soltas no ListView para serem construídas sob demanda.
+              if (queue.entriesClosedByStaff) ...[
+                _EntriesClosedNotice(consoleKey: consoleKey),
+                const SizedBox(height: Insets.lg),
+              ],
               QueueSectionTitle(l10n.queueWaitingCount(queue.waitingCount)),
-              for (final ticket in queue.waiting) WaitingTicketTile(ticket: ticket),
+              for (final ticket in queue.waiting)
+                _RemovableTicket(
+                  key: ValueKey(ticket.ticketId),
+                  consoleKey: consoleKey,
+                  ticket: ticket,
+                ),
             ],
           ],
         ),
@@ -184,10 +212,22 @@ const _mainActionKey = ValueKey('shift-main-action');
 ///
 /// Cada situação tem cor, ícone e texto próprios, para ser reconhecida de relance do balcão.
 class _ShiftCard extends ConsumerWidget {
-  const _ShiftCard({required this.consoleKey, required this.status, required this.serving});
+  const _ShiftCard({
+    required this.consoleKey,
+    required this.status,
+    required this.serving,
+    required this.entriesClosed,
+    required this.hasQueue,
+  });
 
   final ConsoleKey consoleKey;
   final BarberStatus status;
+
+  /// A fila de hoje já existe (alguém iniciou o expediente ou entrou nela).
+  final bool hasQueue;
+
+  /// A equipe fechou a entrada de novos clientes.
+  final bool entriesClosed;
 
   /// Quem este barbeiro está atendendo agora, se houver.
   final ServingTicket? serving;
@@ -200,9 +240,7 @@ class _ShiftCard extends ConsumerWidget {
     final console = ref.watch(consoleControllerProvider(consoleKey));
     final controller = ref.read(consoleControllerProvider(consoleKey).notifier);
     final serving = this.serving;
-    // Com a barra de ação na tela, a falha aparece nela: perto do dedo e à vista mesmo com a
-    // lista rolada. Aqui só quando a barra não existe.
-    final failure = _showsActionBar(status, serving) ? null : console.failure;
+    final failure = _failureOnCard(console, status, serving) ? console.failure : null;
 
     VoidCallback? whenFree(VoidCallback action) => console.busy ? null : action;
 
@@ -238,6 +276,15 @@ class _ShiftCard extends ConsumerWidget {
       ConsoleAction.endShift => l10n.consoleShiftEnding,
       _ => null,
     };
+    // Estas não trocam o texto do botão de expediente; só acendem a barra de progresso.
+    final otherPending = switch (console.pending) {
+      ConsoleAction.closeEntries => l10n.consoleClosingEntries,
+      ConsoleAction.openEntries => l10n.consoleOpeningEntries,
+      ConsoleAction.removeTicket => l10n.consoleRemoving,
+      // Com botões na barra, quem mostra o progresso do desfazer é ela.
+      ConsoleAction.undo when !_hasActionButtons(status, serving) => l10n.consoleUndoing,
+      _ => null,
+    };
     final (actionLabel, action) = switch (status) {
       BarberStatus.off => (l10n.consoleShiftStartAction, controller.startShift),
       BarberStatus.available => (l10n.consoleShiftPauseAction, controller.pause),
@@ -256,9 +303,9 @@ class _ShiftCard extends ConsumerWidget {
           // Reserva a altura da barra para o cartão não pular quando um pedido começa ou termina.
           SizedBox(
             height: Insets.xs,
-            child: pendingLabel == null
+            child: (pendingLabel ?? otherPending) == null
                 ? null
-                : LinearProgressIndicator(semanticsLabel: pendingLabel),
+                : LinearProgressIndicator(semanticsLabel: pendingLabel ?? otherPending),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.sm, Insets.sm, Insets.lg),
@@ -283,16 +330,30 @@ class _ShiftCard extends ConsumerWidget {
                     ),
                     // Encerrar tira o barbeiro da fila pública: fica a dois toques, como o "Sair",
                     // para um esbarrão no balcão não encerrar o expediente.
-                    if (status != BarberStatus.off)
+                    // Fechar a entrada vale também fora do expediente (o dono que não corta, ou
+                    // quem já encerrou): basta a fila de hoje existir.
+                    if (status != BarberStatus.off || hasQueue)
                       PopupMenuButton<void>(
                         tooltip: l10n.consoleShiftMoreActions,
                         enabled: !console.busy,
                         iconColor: foreground,
                         itemBuilder: (context) => [
+                          // Fechar a entrada também fica a dois toques: barra os clientes novos.
                           PopupMenuItem<void>(
-                            onTap: whenFree(controller.endShift),
-                            child: Text(l10n.consoleShiftEndAction),
+                            onTap: whenFree(
+                              () => controller.setAcceptingEntries(accepting: entriesClosed),
+                            ),
+                            child: Text(
+                              entriesClosed
+                                  ? l10n.consoleOpenEntriesAction
+                                  : l10n.consoleCloseEntriesAction,
+                            ),
                           ),
+                          if (status != BarberStatus.off)
+                            PopupMenuItem<void>(
+                              onTap: whenFree(controller.endShift),
+                              child: Text(l10n.consoleShiftEndAction),
+                            ),
                         ],
                       )
                     else
@@ -324,10 +385,6 @@ class _ShiftCard extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      ],
-                      if (failure != null) ...[
-                        const SizedBox(height: Insets.md),
-                        _FailureNotice(failure: failure),
                       ],
                       const SizedBox(height: Insets.lg),
                       // As cores vêm do cartão, para o botão contrastar com o fundo de cada situação.
@@ -362,6 +419,15 @@ class _ShiftCard extends ConsumerWidget {
                           child: Text(pendingLabel ?? actionLabel),
                         ),
                       },
+                      // Abaixo do botão, para ele não sair do lugar.
+                      if (failure != null) ...[
+                        const SizedBox(height: Insets.md),
+                        _FailureNotice(
+                          failure: failure,
+                          action: console.failedAction,
+                          onDismiss: controller.clearFailure,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -374,38 +440,304 @@ class _ShiftCard extends ConsumerWidget {
   }
 }
 
-/// O motivo de um pedido recusado. Fica na tela até a próxima tentativa: um aviso passageiro
-/// passaria despercebido por quem olha de relance.
-class _FailureNotice extends StatelessWidget {
-  const _FailureNotice({required this.failure});
+/// Aviso de que a entrada está fechada, com o caminho de volta à mão: uma entrada esquecida
+/// fechada deixa a barbearia sem clientes novos sem ninguém perceber.
+class _EntriesClosedNotice extends ConsumerWidget {
+  const _EntriesClosedNotice({required this.consoleKey});
 
-  final Failure failure;
+  final ConsoleKey consoleKey;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final console = ref.watch(consoleControllerProvider(consoleKey));
+    final busy = console.busy;
+
     return Semantics(
-      liveRegion: true,
+      container: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: scheme.errorContainer,
+          color: scheme.tertiaryContainer,
           borderRadius: BorderRadius.circular(Insets.radius),
         ),
         child: Padding(
           padding: const EdgeInsets.all(Insets.md),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.error_outline_rounded, color: scheme.onErrorContainer),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Text(
-                  AppLocalizations.of(context).failureMessage(failure),
-                  style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onErrorContainer),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.door_front_door_outlined, color: scheme.onTertiaryContainer),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        l10n.consoleEntriesClosedNotice,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: scheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FilledButton.tonal(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, Insets.touchTarget)),
+                  onPressed: busy
+                      ? null
+                      : () => ref
+                            .read(consoleControllerProvider(consoleKey).notifier)
+                            .setAcceptingEntries(accepting: true),
+                  child: Text(
+                    console.pending == ConsoleAction.openEntries
+                        ? l10n.consoleOpeningEntries
+                        : l10n.consoleOpenEntriesAction,
+                  ),
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Uma pessoa da espera, com o botão para tirá-la da fila.
+///
+/// O servidor não desfaz a remoção, então aqui há confirmação: é uma ação rara e sem volta, ao
+/// contrário do "Próximo!". É um botão, e não um gesto de arrastar: funciona com mouse, teclado
+/// e leitor de tela, e não dispara ao rolar a lista.
+class _RemovableTicket extends ConsumerWidget {
+  const _RemovableTicket({required this.consoleKey, required this.ticket, super.key});
+
+  final ConsoleKey consoleKey;
+  final WaitingTicket ticket;
+
+  Future<void> _confirmAndRemove(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        return AlertDialog(
+          // Deitado e com letra grande, o alerta de que não dá para desfazer não pode ser cortado.
+          scrollable: true,
+          title: Text(l10n.consoleRemoveTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${l10n.queueTicketNumber(ticket.number)} · ${ticket.label}',
+                style: theme.textTheme.titleLarge,
+              ),
+              const SizedBox(height: Insets.sm),
+              Text(l10n.consoleRemoveBody),
+            ],
+          ),
+          actions: [
+            // O foco começa na saída segura; a ação sem volta leva a cor de erro. Os tamanhos
+            // são explícitos porque o tema estica os botões cheios na largura toda.
+            OutlinedButton(
+              autofocus: true,
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, Insets.touchTarget)),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.consoleRemoveCancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, Insets.touchTarget),
+                backgroundColor: scheme.error,
+                foregroundColor: scheme.onError,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.consoleRemoveConfirm),
+            ),
+          ],
+        );
+      },
+    );
+    // Com o diálogo aberto a fila continua ao vivo: a pessoa pode ter sido chamada ou saído, e
+    // esta linha (dona do `ref`) pode não existir mais.
+    if (!(confirmed ?? false) || !context.mounted) return;
+    unawaited(
+      ref.read(consoleControllerProvider(consoleKey).notifier).removeTicket(ticket),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final (:busy, :removal) = ref.watch(
+      consoleControllerProvider(consoleKey).select(
+        (state) => (busy: state.busy, removal: state.pending == ConsoleAction.removeTicket),
+      ),
+    );
+    final removing =
+        removal &&
+        ref.read(consoleControllerProvider(consoleKey).notifier).removingTicketId ==
+            ticket.ticketId;
+
+    return Row(
+      children: [
+        Expanded(
+          // Lida de uma vez pelo leitor de tela; esmaecida enquanto a remoção está a caminho.
+          child: Opacity(
+            opacity: removing ? 0.5 : 1,
+            child: MergeSemantics(child: WaitingTicketTile(ticket: ticket)),
+          ),
+        ),
+        if (removing)
+          SizedBox.square(
+            dimension: Insets.touchTarget,
+            child: Padding(
+              padding: const EdgeInsets.all(Insets.md - Insets.xs),
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                semanticsLabel: l10n.consoleRemoving,
+              ),
+            ),
+          )
+        else
+          IconButton(
+            tooltip: l10n.consoleRemoveWho(ticket.number, ticket.label),
+            icon: const Icon(Icons.person_remove_outlined),
+            color: scheme.onSurfaceVariant,
+            onPressed: busy ? null : () => _confirmAndRemove(context, ref),
+          ),
+      ],
+    );
+  }
+}
+
+/// O motivo de um pedido recusado. Fica na tela até a próxima tentativa ou até o barbeiro dispensar:
+/// um aviso passageiro passaria despercebido por quem olha de relance.
+class _FailureNotice extends StatefulWidget {
+  const _FailureNotice({required this.failure, required this.action, required this.onDismiss});
+
+  final Failure failure;
+
+  /// O pedido recusado. O aviso pode aparecer longe de onde ele foi feito.
+  final ConsoleAction? action;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_FailureNotice> createState() => _FailureNoticeState();
+}
+
+class _FailureNoticeState extends State<_FailureNotice> {
+  /// Fração máxima da altura da tela. Com letra grande, o aviso não pode tirar da tela o botão
+  /// principal nem o Desfazer: o que não couber rola aqui dentro.
+  static const _maxScreenShare = 0.2;
+
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // No cartão, o aviso nasce abaixo do botão e pode ficar fora da área visível da lista.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        Scrollable.ensureVisible(
+          context,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        ),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final reason = l10n.failureMessage(widget.failure);
+    // Um motivo específico já diz o que aconteceu. Os outros não dizem o que ficou pendente, e,
+    // sem resposta do servidor, o app não sabe se o pedido foi aplicado.
+    final specific = switch (widget.failure) {
+      TicketGoneFailure() => true,
+      QueueRuleFailure() => reason != l10n.genericError,
+      _ => false,
+    };
+    final message = specific
+        ? reason
+        : switch (widget.action) {
+            ConsoleAction.undo => l10n.consoleUndoUnconfirmed(reason),
+            ConsoleAction.removeTicket => l10n.consoleRemoveUnconfirmed(reason),
+            _ => reason,
+          };
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(Insets.radius),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * _maxScreenShare),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              // A barra sempre visível é o sinal de que há mais texto para rolar. É desenhada aqui
+              // para ter a mesma cor em toda plataforma e não somar com a automática do desktop.
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: RawScrollbar(
+                  controller: _scroll,
+                  thumbVisibility: true,
+                  thumbColor: scheme.onErrorContainer,
+                  thickness: Insets.xs,
+                  radius: const Radius.circular(Insets.xs),
+                  child: SingleChildScrollView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.all(Insets.md),
+                    // Só o motivo é anunciado, sem o botão de dispensar.
+                    child: Semantics(
+                      container: true,
+                      liveRegion: true,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.error_outline_rounded, color: scheme.onErrorContainer),
+                          const SizedBox(width: Insets.sm),
+                          Expanded(
+                            child: Text(
+                              message,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: scheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: l10n.consoleDismissFailure,
+              icon: const Icon(Icons.close_rounded),
+              color: scheme.onErrorContainer,
+              onPressed: widget.onDismiss,
+            ),
+          ],
         ),
       ),
     );
@@ -420,8 +752,25 @@ class _FailureNotice extends StatelessWidget {
 class ShopConsoleActionBar extends ConsumerWidget {
   const ShopConsoleActionBar({required this.shopId, required this.barberId, super.key});
 
+  /// Fração da altura da tela que a barra sempre pode ocupar.
+  static const _maxScreenShare = 0.6;
+
+  /// Altura de uma linha de texto do aviso de Desfazer, antes da escala de letra.
+  static const _undoNoticeLine = 20.0;
+
   final String shopId;
   final String barberId;
+
+  /// Até onde a barra pode crescer. Ela deixa livre o espaço do aviso de Desfazer, que aparece logo
+  /// acima dela. Só a fração fixa cortaria o motivo de uma recusa quando o celular está deitado.
+  double _maxHeight(BuildContext context) {
+    final screen = MediaQuery.sizeOf(context).height;
+    // Duas linhas de texto, mais as margens do aviso.
+    final undoNotice = Insets.xxl + 2 * MediaQuery.textScalerOf(context).scale(_undoNoticeLine);
+    // O limite vale para a barra inteira: o SafeArea soma a área segura por fora dele.
+    return math.max(screen * _maxScreenShare, screen - undoNotice) -
+        MediaQuery.paddingOf(context).bottom;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -440,10 +789,26 @@ class ShopConsoleActionBar extends ConsumerWidget {
 
     final status = queue?.statusOf(barberId) ?? BarberStatus.off;
     final serving = queue?.servedBy(barberId);
-    if (!_showsActionBar(status, serving)) return const SizedBox.shrink();
+    final failure = _failureOnCard(console, status, serving) ? null : console.failure;
+    final failureNotice = failure == null
+        ? null
+        : _FailureNotice(
+            failure: failure,
+            action: console.failedAction,
+            onDismiss: controller.clearFailure,
+          );
+    if (!_hasActionButtons(status, serving)) {
+      if (failureNotice == null) return const SizedBox.shrink();
+      return Material(
+        color: scheme.surface,
+        child: SafeArea(
+          top: false,
+          child: _ActionBarBody(child: failureNotice),
+        ),
+      );
+    }
     // Em pausa o barbeiro termina quem está na cadeira, mas não chama mais ninguém.
     final next = status == BarberStatus.available ? queue?.nextFor(barberId) : null;
-    final failure = console.failure;
 
     VoidCallback? whenFree(VoidCallback action) => console.busy ? null : action;
 
@@ -472,29 +837,32 @@ class ShopConsoleActionBar extends ConsumerWidget {
       color: scheme.surface,
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Reserva a altura da barra de progresso para os botões não pularem.
-            SizedBox(
-              height: Insets.xs,
-              child: pendingLabel == null
-                  ? null
-                  : LinearProgressIndicator(semanticsLabel: pendingLabel),
-            ),
-            Center(
-              heightFactor: 1,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: Insets.maxContentWidth),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.sm, Insets.lg, Insets.md),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: _maxHeight(context),
+          ),
+          // Ancorada embaixo: o que não couber some por cima, e o botão principal fica à vista.
+          child: SingleChildScrollView(
+            primary: false,
+            reverse: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Reserva a altura da barra de progresso para os botões não pularem.
+                SizedBox(
+                  height: Insets.xs,
+                  child: pendingLabel == null
+                      ? null
+                      : LinearProgressIndicator(semanticsLabel: pendingLabel),
+                ),
+                _ActionBarBody(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (failure != null) ...[
-                        _FailureNotice(failure: failure),
+                      if (failureNotice != null) ...[
+                        failureNotice,
                         const SizedBox(height: Insets.sm),
                       ],
                       if (serving != null) ...[
@@ -560,9 +928,30 @@ class ShopConsoleActionBar extends ConsumerWidget {
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A largura e as margens do conteúdo da barra de baixo.
+class _ActionBarBody extends StatelessWidget {
+  const _ActionBarBody({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      heightFactor: 1,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Insets.maxContentWidth),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.sm, Insets.lg, Insets.md),
+          child: child,
         ),
       ),
     );

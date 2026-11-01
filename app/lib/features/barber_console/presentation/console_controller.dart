@@ -31,6 +31,11 @@ enum ConsoleAction {
   /// O cliente chamado não apareceu.
   noShow,
   undo,
+
+  /// Tira da fila alguém que ainda espera.
+  removeTicket,
+  closeEntries,
+  openEntries,
 }
 
 /// Um "Próximo!", "Finalizar" ou "Não veio" que o servidor aceitou e que ainda pode ser desfeito.
@@ -58,7 +63,13 @@ final class AdvanceNotice {
 
 @immutable
 final class ConsoleState {
-  const ConsoleState({this.pending, this.settling = false, this.failure, this.lastAdvance});
+  const ConsoleState({
+    this.pending,
+    this.settling = false,
+    this.failure,
+    this.failedAction,
+    this.lastAdvance,
+  });
 
   /// Pedido que a fila pública ainda não confirmou; `null` quando não há pedido em aberto.
   final ConsoleAction? pending;
@@ -67,8 +78,11 @@ final class ConsoleState {
   /// novo que apareceu no mesmo lugar.
   final bool settling;
 
-  /// Falha do último pedido; some ao tentar de novo.
+  /// Falha do último pedido; some ao tentar de novo ou ao ser dispensada.
   final Failure? failure;
+
+  /// O pedido que gerou [failure]: a tela mostra o motivo perto de onde o barbeiro tocou.
+  final ConsoleAction? failedAction;
 
   /// O último avanço da fila aceito, enquanto ainda dá para desfazer: a tela mostra o aviso com
   /// "Desfazer" quando ele aparece e tira quando ele some (desfeito, recusado ou vencido).
@@ -77,21 +91,30 @@ final class ConsoleState {
   /// Enquanto ocupado, o console não aceita outro pedido: um comando por vez.
   bool get busy => pending != null || settling;
 
+  /// Este estado sem pedido em aberto, mantendo a falha e o aviso de desfazer.
+  ConsoleState settled({bool settling = false}) => ConsoleState(
+    settling: settling,
+    failure: failure,
+    failedAction: failedAction,
+    lastAdvance: lastAdvance,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is ConsoleState &&
       other.pending == pending &&
       other.settling == settling &&
       other.failure == failure &&
+      other.failedAction == failedAction &&
       other.lastAdvance == lastAdvance;
 
   @override
-  int get hashCode => Object.hash(pending, settling, failure, lastAdvance);
+  int get hashCode => Object.hash(pending, settling, failure, failedAction, lastAdvance);
 
   @override
   String toString() =>
       'ConsoleState(pending: ${pending?.name}, settling: $settling, failure: $failure, '
-      'lastAdvance: ${lastAdvance?.id})';
+      'failedAction: ${failedAction?.name}, lastAdvance: ${lastAdvance?.id})';
 }
 
 /// Um avanço como foi pedido: repeti-lo é mandar exatamente isto de novo.
@@ -365,6 +388,58 @@ class ConsoleController extends Notifier<ConsoleState> {
   /// outra pessoa lá, recusa em vez de finalizar quem o barbeiro não está vendo.
   String? get _servingTicketId => _queue?.servedBy(key.barberId)?.ticketId;
 
+  /// Tira da fila alguém que ainda espera (desistiu, entrada de brincadeira). O servidor não
+  /// desfaz isso: a tela pede confirmação antes de chamar.
+  Future<void> removeTicket(WaitingTicket ticket) {
+    // O descanso segura o toque repetido, e aqui o barbeiro acabou de confirmar num diálogo. Sem
+    // isto, o que ele confirmou seria ignorado sem aviso.
+    if (state.settling) {
+      _timer?.cancel();
+      _timer = null;
+      state = state.settled();
+    }
+    if (!state.busy) _removingTicketId = ticket.ticketId;
+    return _removeTicket(ticket);
+  }
+
+  /// Tira da tela o motivo de uma recusa, para quem já leu e não vai tentar de novo.
+  void clearFailure() => state = ConsoleState(
+    pending: state.pending,
+    settling: state.settling,
+    lastAdvance: state.lastAdvance,
+  );
+
+  /// O ticket do último pedido de remoção; a tela marca essa linha enquanto o pedido está em
+  /// aberto (`pending == ConsoleAction.removeTicket`).
+  String? get removingTicketId => _removingTicketId;
+  String? _removingTicketId;
+
+  Future<void> _removeTicket(WaitingTicket ticket) => _run<void>(
+    ConsoleAction.removeTicket,
+    () async {
+      final result = await _repository.removeTicket(
+        shopId: key.shopId,
+        ticketId: ticket.ticketId,
+      );
+      return switch (result.failureOrNull) {
+        // Só aqui essas recusas querem dizer que a pessoa saiu da espera.
+        QueueRuleFailure(
+          code: QueueErrorCode.ticketNotFound || QueueErrorCode.invalidTicketState,
+        ) =>
+          Err<void>(TicketGoneFailure(number: ticket.number, label: ticket.label)),
+        _ => result,
+      };
+    },
+    confirmed: (queue, _) => queue?.waitingTicket(ticket.ticketId) == null,
+  );
+
+  /// Fecha ou reabre a entrada de novos clientes. Quem já está na fila continua sendo atendido.
+  Future<void> setAcceptingEntries({required bool accepting}) => _run<void>(
+    accepting ? ConsoleAction.openEntries : ConsoleAction.closeEntries,
+    () => _repository.setAcceptingEntries(shopId: key.shopId, accepting: accepting),
+    confirmed: (queue, _) => queue != null && queue.entriesClosedByStaff == !accepting,
+  );
+
   Future<void> _setStatus(ConsoleAction action, BarberStatus status) => _run<void>(
     action,
     () {
@@ -412,12 +487,13 @@ class ConsoleController extends Notifier<ConsoleState> {
     pending: state.pending,
     settling: state.settling,
     failure: state.failure,
+    failedAction: state.failedAction,
     lastAdvance: advance,
   );
 
   void _fail(ConsoleAction action, Failure failure) {
     final advance = state.lastAdvance;
-    state = ConsoleState(failure: failure, lastAdvance: advance);
+    state = ConsoleState(failure: failure, failedAction: action, lastAdvance: advance);
     if (action != ConsoleAction.undo || advance == null) return;
 
     // O toque em "Desfazer" já tirou o aviso da tela. Se o servidor recusou, não há mais o que
@@ -484,11 +560,8 @@ class ConsoleController extends Notifier<ConsoleState> {
   void _settle() {
     _confirmed = null;
     _staleChair = null;
-    state = ConsoleState(settling: true, failure: state.failure, lastAdvance: state.lastAdvance);
-    _restartTimer(
-      settleDelay,
-      () => state = ConsoleState(failure: state.failure, lastAdvance: state.lastAdvance),
-    );
+    state = state.settled(settling: true);
+    _restartTimer(settleDelay, () => state = state.settled());
   }
 
   void _restartTimer(Duration duration, void Function() action) {

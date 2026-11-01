@@ -146,6 +146,22 @@ Future<void> pumpProximoApp(
   await tester.pumpAndSettle();
 }
 
+/// Tela de celular com a letra aumentada pelo sistema e, se pedido, área segura embaixo.
+void useLargeText(
+  WidgetTester tester, {
+  Size size = const Size(360, 640),
+  double scale = 2,
+  double safeBottom = 0,
+}) {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  tester.view.padding = FakeViewPadding(bottom: safeBottom);
+  tester.view.viewPadding = FakeViewPadding(bottom: safeBottom);
+  tester.platformDispatcher.textScaleFactorTestValue = scale;
+  addTearDown(tester.view.reset);
+  addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+}
+
 /// Simula uma janela larga de navegador, em que o app usa o layout de site.
 /// Sem isto os testes rodam em 800×600, que cai no layout de celular.
 void useWideScreen(WidgetTester tester) {
