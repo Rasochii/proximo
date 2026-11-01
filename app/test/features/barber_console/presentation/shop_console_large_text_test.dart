@@ -97,7 +97,7 @@ void main() {
         expect(failureIcon, findsOneWidget);
         expect(tester.takeException(), isNull);
         expect(tester.getRect(find.text('Desfazer')).top, greaterThanOrEqualTo(0));
-        expect(tester.getRect(bigButton).bottom, lessThanOrEqualTo(size.height));
+        expect(tester.getRect(bigButton).bottom, lessThanOrEqualTo(size.height - safeBottom));
       },
     );
   }

@@ -10,9 +10,15 @@ import 'package:flutter/services.dart';
 Future<void> loadRoboto() async {
   // O executável dos testes fica em bin/cache/artifacts/engine/<plataforma>/.
   final artifacts = File(Platform.resolvedExecutable).parent.parent.parent;
+  final fonts = Directory('${artifacts.path}/material_fonts').listSync().whereType<File>();
   final loader = FontLoader('Roboto');
   for (final weight in ['regular', 'medium', 'bold']) {
-    final font = File('${artifacts.path}/material_fonts/roboto-$weight.ttf');
+    // A caixa do nome do arquivo muda de uma plataforma para outra.
+    final name = 'roboto-$weight.ttf';
+    final font = fonts.firstWhere(
+      (file) => file.uri.pathSegments.last.toLowerCase() == name,
+      orElse: () => throw StateError('$name não está em material_fonts: ${fonts.toList()}'),
+    );
     loader.addFont(Future.value(ByteData.sublistView(font.readAsBytesSync())));
   }
   await loader.load();
