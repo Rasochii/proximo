@@ -126,7 +126,34 @@
   "consoleOpeningEntries": "Reabrindo a entrada…",
   "consoleEntriesClosedNotice": "Entrada fechada: ninguém novo entra na fila. Quem já está nela continua sendo atendido.",
   "consoleRemoving": "Removendo…",
-  "errorTicketGone": "Essa pessoa já não está mais esperando.",
+  "errorTicketGone": "Nº {number} · {label} não está mais esperando.",
+  "@errorTicketGone": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "consoleUndoUnconfirmed": "Não deu para confirmar se desfez. {reason}",
+  "@consoleUndoUnconfirmed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "consoleRemoveUnconfirmed": "Não deu para confirmar a remoção. {reason}",
+  "@consoleRemoveUnconfirmed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "consoleDismissFailure": "Dispensar aviso",
   "consoleRemoveConfirm": "Remover",
   "consoleRemoveCancel": "Manter na fila",
   "consoleRemoveBody": "A pessoa perde o lugar. Não dá para desfazer.",

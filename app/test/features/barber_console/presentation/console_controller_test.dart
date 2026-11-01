@@ -10,7 +10,9 @@ import 'package:proximo/core/firebase/backend_ports.dart';
 import 'package:proximo/core/firebase/firebase_providers.dart';
 import 'package:proximo/core/json/json.dart';
 import 'package:proximo/features/barber_console/presentation/console_controller.dart';
+import 'package:proximo/features/queue/domain/public_queue.dart';
 import 'package:proximo/features/queue/domain/queue_types.dart';
+import 'package:proximo/features/queue/presentation/queue_providers.dart';
 
 import '../../../helpers/fake_callables.dart';
 import '../../../helpers/fixtures.dart';
@@ -69,6 +71,10 @@ void main() {
 
   ConsoleState state() => container.read(consoleControllerProvider(_key));
   ConsoleController controller() => container.read(consoleControllerProvider(_key).notifier);
+
+  /// Quem espera na fila que o console está mostrando.
+  WaitingTicket waiting(String ticketId) =>
+      container.read(publicQueueProvider(_key.shopId)).value!.waitingTicket(ticketId)!;
 
   // Um avanço aceito deixa o temporizador do prazo de desfazer correndo. O container é
   // descartado no fim do corpo de cada teste, antes de o flutter_test conferir se sobrou
@@ -174,7 +180,10 @@ void main() {
 
       expect(
         state(),
-        const ConsoleState(failure: QueueRuleFailure(QueueErrorCode.finishCurrentFirst)),
+        const ConsoleState(
+          failure: QueueRuleFailure(QueueErrorCode.finishCurrentFirst),
+          failedAction: ConsoleAction.endShift,
+        ),
       );
       expect(state().busy, isFalse);
     });
@@ -456,7 +465,10 @@ void main() {
 
       expect(
         state(),
-        const ConsoleState(failure: QueueRuleFailure(QueueErrorCode.undoConflict)),
+        const ConsoleState(
+          failure: QueueRuleFailure(QueueErrorCode.undoConflict),
+          failedAction: ConsoleAction.undo,
+        ),
       );
     });
 
@@ -501,7 +513,10 @@ void main() {
 
       expect(
         state(),
-        const ConsoleState(failure: QueueRuleFailure(QueueErrorCode.servingChanged)),
+        const ConsoleState(
+          failure: QueueRuleFailure(QueueErrorCode.servingChanged),
+          failedAction: ConsoleAction.callNext,
+        ),
       );
     });
 
@@ -697,7 +712,7 @@ void main() {
     ) async {
       arrange(queue: queueWith('available'));
       await tester.pump();
-      // A primeira tentativa consome 2 segundos até desistir.
+      // O auxiliar deixa passar 2 segundos, e a falha chega antes disso.
       await callNextUnanswered(tester);
       await tester.pump(const Duration(seconds: 8));
 
@@ -933,13 +948,17 @@ void main() {
           const ConsoleState(
             settling: true,
             failure: QueueRuleFailure(QueueErrorCode.servingChanged),
+            failedAction: ConsoleAction.callNext,
           ),
         );
 
         await tester.pump(ConsoleController.settleDelay);
         expect(
           state(),
-          const ConsoleState(failure: QueueRuleFailure(QueueErrorCode.servingChanged)),
+          const ConsoleState(
+            failure: QueueRuleFailure(QueueErrorCode.servingChanged),
+            failedAction: ConsoleAction.callNext,
+          ),
         );
       },
     );
@@ -1049,7 +1068,7 @@ void main() {
       );
       await tester.pump();
 
-      unawaited(controller().removeTicket('t2'));
+      unawaited(controller().removeTicket(waiting('t2')));
       await tester.pump();
 
       expect(backend.calls.single.name, 'removeTicket');
@@ -1061,6 +1080,214 @@ void main() {
       expect(state().settling, isTrue);
       await tester.pump(ConsoleController.settleDelay);
     });
+
+    /// Um "Próximo!" aceito, com Lucas na cadeira e o aviso de desfazer na tela.
+    Future<AdvanceNotice?> advanceWithUndo(WidgetTester tester) async {
+      arrange(queue: queueWith('available', serving: lucasServed()));
+      await tester.pump();
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      await tester.pump(ConsoleController.settleDelay);
+      expect(state().lastAdvance, isNotNull);
+      return state().lastAdvance;
+    }
+
+    testConsole('remover depois de uma falha de rede não muda o pedido sem resposta', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      final sent = await callNextUnanswered(tester);
+
+      backend.handler = (name, payload) => null;
+      unawaited(controller().removeTicket(waiting('t3')));
+      await tester.pump();
+      await letSettle(tester);
+
+      backend.handler = (name, payload) => calledLucas();
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(backend.calls.last.name, 'callNext');
+      expect(backend.calls.last.payload['requestId'], sent);
+      await letSettle(tester);
+    });
+
+    testConsole('remoção aceita mantém o desfazer do avanço anterior', (tester) async {
+      final offered = await advanceWithUndo(tester);
+
+      backend.handler = (name, payload) => null;
+      unawaited(controller().removeTicket(waiting('t3')));
+      await tester.pump();
+      expect(state().lastAdvance, offered);
+
+      await letSettle(tester);
+      expect(state().lastAdvance, offered);
+    });
+
+    testConsole('remoção sem rede mostra a falha, libera os botões e mantém o desfazer', (
+      tester,
+    ) async {
+      final offered = await advanceWithUndo(tester);
+
+      backend.handler = (name, payload) => throw const CallableException('unavailable');
+      unawaited(controller().removeTicket(waiting('t3')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(state().failure, isA<NetworkFailure>());
+      expect(state().busy, isFalse);
+      expect(state().lastAdvance, offered);
+    });
+
+    testConsole('desfazer tocado enquanto a remoção está a caminho volta a ser oferecido', (
+      tester,
+    ) async {
+      final offered = await advanceWithUndo(tester);
+
+      backend
+        ..handler = ((name, payload) => null)
+        ..gate = Completer<void>();
+      unawaited(controller().removeTicket(waiting('t3')));
+      await tester.pump();
+      unawaited(controller().undoLast());
+      await tester.pump();
+
+      expect(backend.calls.where((call) => call.name == 'undoLast'), isEmpty);
+      expect(state().lastAdvance?.result, offered?.result);
+
+      backend.gate!.complete();
+      await tester.pump();
+      await letSettle(tester);
+    });
+
+    testConsole('desfazer tocado enquanto a fila não mostra a remoção é enviado na hora', (
+      tester,
+    ) async {
+      await advanceWithUndo(tester);
+
+      backend.handler = (name, payload) => null;
+      unawaited(controller().removeTicket(waiting('t3')));
+      await tester.pump();
+      expect(state().pending, ConsoleAction.removeTicket);
+
+      unawaited(controller().undoLast());
+      await tester.pump();
+
+      expect(backend.calls.last.name, 'undoLast');
+      expect(state().pending, ConsoleAction.undo);
+      await letSettle(tester);
+    });
+
+    testConsole('com outro pedido em aberto, a remoção é ignorada e não marca a linha', (
+      tester,
+    ) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      backend.gate = Completer<void>();
+      unawaited(controller().removeTicket(waiting('t2')));
+      await tester.pump();
+      expect(controller().removingTicketId, 't2');
+
+      unawaited(controller().removeTicket(waiting('t3')));
+      await tester.pump();
+
+      expect(controller().removingTicketId, 't2');
+      expect(backend.calls, hasLength(1));
+      backend.gate!.complete();
+      await tester.pump();
+      await letSettle(tester);
+    });
+
+    testConsole('remoção confirmada durante o descanso dos botões é enviada', (tester) async {
+      final offered = await advanceWithUndo(tester);
+      backend.handler = (name, payload) => throw FakeCallables.domainError('serving-changed');
+      unawaited(controller().callNext());
+      await tester.pump();
+
+      // A tela mudou com o diálogo de confirmação aberto, e os botões estão descansando.
+      docs.emit(_queue, queueWith('available'));
+      await tester.pump();
+      expect(state().settling, isTrue);
+
+      backend
+        ..handler = ((name, payload) => null)
+        ..gate = Completer<void>();
+      unawaited(controller().removeTicket(waiting('t3')));
+      // A resposta demora mais que o descanso: o temporizador antigo não pode encerrar o pedido.
+      await tester.pump(ConsoleController.settleDelay);
+
+      expect(backend.calls.last.name, 'removeTicket');
+      expect(state().pending, ConsoleAction.removeTicket);
+      expect(state().lastAdvance, offered);
+      backend.gate!.complete();
+      await tester.pump();
+      await letSettle(tester);
+    });
+
+    testConsole('vencer o prazo de desfazer não apaga de onde veio a falha na tela', (
+      tester,
+    ) async {
+      await advanceWithUndo(tester);
+      backend.handler = (name, payload) => throw FakeCallables.domainError('barber-not-available');
+      unawaited(controller().callNext());
+      await tester.pump();
+
+      await tester.pump(ConsoleController.undoWindow);
+
+      expect(state().lastAdvance, isNull);
+      expect(state().failedAction, ConsoleAction.callNext);
+    });
+
+    testConsole('dispensar a falha não mexe no aviso de desfazer', (tester) async {
+      final offered = await advanceWithUndo(tester);
+      backend.handler = (name, payload) => throw FakeCallables.domainError('barber-not-available');
+      unawaited(controller().callNext());
+      await tester.pump();
+      expect(state().failure, isNotNull);
+
+      controller().clearFailure();
+
+      expect(state(), ConsoleState(lastAdvance: offered));
+    });
+
+    testConsole('remoção recusada por outra regra mantém o motivo', (tester) async {
+      arrange(queue: queueWith('available'));
+      await tester.pump();
+      backend.handler = (name, payload) => throw FakeCallables.domainError('day-mismatch');
+
+      unawaited(controller().removeTicket(waiting('t2')));
+      await tester.pump();
+
+      expect(state().failure, const QueueRuleFailure(QueueErrorCode.dayMismatch));
+    });
+
+    for (final code in ['ticket-not-found', 'invalid-ticket-state']) {
+      testConsole('remoção recusada com $code quer dizer que a pessoa já saiu', (tester) async {
+        arrange(queue: queueWith('available'));
+        await tester.pump();
+        backend.handler = (name, payload) => throw FakeCallables.domainError(code);
+
+        unawaited(controller().removeTicket(waiting('t2')));
+        await tester.pump();
+
+        expect(state().failure, const TicketGoneFailure(number: 2, label: 'Lucas M.'));
+        expect(state().failedAction, ConsoleAction.removeTicket);
+        expect(state().busy, isFalse);
+      });
+
+      testConsole('$code em outra ação não diz que a pessoa saiu', (tester) async {
+        arrange(queue: queueWith('available', serving: lucasServed()));
+        await tester.pump();
+        backend.handler = (name, payload) => throw FakeCallables.domainError(code);
+
+        unawaited(controller().finishCurrent());
+        await tester.pump();
+
+        expect(state().failure, isA<QueueRuleFailure>());
+      });
+    }
 
     testConsole('fechar e reabrir a entrada esperam a fila mostrar a mudança', (tester) async {
       arrange(queue: queueWith('available'));

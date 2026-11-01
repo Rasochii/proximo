@@ -8,67 +8,12 @@ import 'package:proximo/core/json/json.dart';
 import 'package:proximo/features/barber_console/presentation/console_controller.dart';
 import 'package:proximo/features/barber_console/presentation/shop_console_view.dart';
 
+import '../../../helpers/console_harness.dart';
 import '../../../helpers/fake_auth.dart';
 import '../../../helpers/fake_callables.dart';
 import '../../../helpers/fixtures.dart';
 
-const _shop = 'shops/barbearia-do-ze';
-const _staff = 'staff/barbeiro-ze';
-const _queue = 'publicQueues/barbearia-do-ze';
-
-/// Zé como aparece na fila pública quando está em expediente.
-JsonMap ze(String status, {int? servingNumber}) => {
-  'id': 'barbeiro-ze',
-  'displayName': 'Zé',
-  'status': status,
-  'servingNumber': servingNumber,
-};
-
-/// Fila com o Zé na situação pedida; o ticket em atendimento (nº 1) é de outro barbeiro.
-JsonMap queueWithZe(String status, {int waiting = 2}) =>
-    publicQueueJson(waiting: waiting, barbers: [ze(status)], servingBarberId: 'barbeiro-joao');
-
-/// Fila em que o Zé está atendendo o ticket nº 1.
-JsonMap queueWithZeServing() => publicQueueJson(
-  barbers: [ze('available', servingNumber: 1)],
-  servingBarberId: 'barbeiro-ze',
-);
-
-Future<({FakeDocuments docs, FakeCallables backend})> openConsole(
-  WidgetTester tester, {
-  JsonMap? queue,
-  FakeCallables? backend,
-  DateTime Function()? clock,
-}) async {
-  final docs = FakeDocuments({
-    _shop: shopJson(),
-    _staff: {'shopId': 'barbearia-do-ze', 'role': 'owner'},
-    _queue: ?queue,
-  });
-  final auth = FakeAuthRepository(signedInAs: barberZe);
-  final callables = backend ?? FakeCallables();
-  addTearDown(docs.dispose);
-  addTearDown(auth.dispose);
-
-  await pumpProximoApp(
-    tester,
-    watch: docs.watch,
-    invoke: callables.invoke,
-    auth: auth,
-    clock: clock,
-  );
-  // Pela rota, e não pelo botão da inicial: assim o teste não depende do layout da inicial.
-  GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/console');
-  await tester.pumpAndSettle();
-  return (docs: docs, backend: callables);
-}
-
-/// Deixa passar a espera pela confirmação da fila e a pausa de segurança dos botões.
-Future<void> letShiftSettle(WidgetTester tester) async {
-  await tester.pump(ConsoleController.confirmationTimeout);
-  await tester.pump(ConsoleController.settleDelay);
-  await tester.pump();
-}
+const _queue = consoleQueue;
 
 /// "Encerrar expediente" fica no menu do cartão, a dois toques.
 Future<void> tapEndShift(WidgetTester tester) async {
@@ -138,7 +83,7 @@ void main() {
       expect(find.byTooltip('Mais ações do expediente'), findsOneWidget);
     });
 
-    testWidgets('sem a barra de ação, o motivo da recusa fica no cartão', (tester) async {
+    testWidgets('sem botões na barra, a recusa do cartão aparece no cartão', (tester) async {
       final backend = FakeCallables(
         (name, payload) => throw const CallableException('permission-denied'),
       );
@@ -148,7 +93,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('console-main-action')), findsNothing);
+      // No cartão, e só nele.
       expect(find.text('Você não tem permissão para fazer isso.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(Card),
+          matching: find.text('Você não tem permissão para fazer isso.'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('se a fila não confirmar, os botões voltam depois de um tempo', (tester) async {
@@ -687,9 +640,47 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.text('Sem conexão com o servidor. Verifique a internet.'), findsOneWidget);
+      expect(
+        find.text(
+          'Não deu para confirmar se desfez. Sem conexão com o servidor. Verifique a internet.',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Desfazer'), findsOneWidget);
       expect(find.text('Chamado: nº 2 · Lucas M.'), findsOneWidget);
+    });
+
+    testWidgets('desfazer em pausa, sem botões na barra, mostra o progresso no cartão', (
+      tester,
+    ) async {
+      final backend = FakeCallables(
+        (name, payload) => {
+          'finished': {'ticketId': 't1', 'outcome': 'done'},
+          'called': null,
+        },
+      );
+      final (:docs, backend: _) = await openConsole(
+        tester,
+        backend: backend,
+        queue: publicQueueJson(
+          barbers: [ze('paused', servingNumber: 1)],
+          servingBarberId: 'barbeiro-ze',
+        ),
+      );
+      await tester.tap(bigButton);
+      await tester.pump();
+      docs.emit(_queue, queueWithZe('paused'));
+      await letShiftSettle(tester);
+
+      backend.gate = Completer<void>();
+      await tester.tap(find.text('Desfazer'));
+      await tester.pump();
+
+      final progress = find.byType(LinearProgressIndicator);
+      expect(tester.widget<LinearProgressIndicator>(progress).semanticsLabel, 'Desfazendo…');
+      backend.gate!.complete();
+      await tester.pump();
+      await letShiftSettle(tester);
     });
 
     testWidgets('sair do console pela rota leva o aviso embora', (tester) async {
@@ -816,7 +807,107 @@ void main() {
       await tester.tap(find.text('Remover'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Essa pessoa já não está mais esperando.'), findsOneWidget);
+      expect(find.text('Nº 2 · Lucas M. não está mais esperando.'), findsOneWidget);
+    });
+
+    testWidgets('recusa sem mensagem própria diz o que ficou pendente', (tester) async {
+      final backend = FakeCallables(
+        (name, payload) => throw FakeCallables.domainError('day-mismatch'),
+      );
+      await openConsole(tester, backend: backend, queue: queueWithZe('available'));
+
+      await tapRemoveLucas(tester);
+      await tester.tap(find.text('Remover'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Não deu para confirmar a remoção. Algo deu errado. Tente de novo em instantes.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('fora do expediente, a recusa de reabrir a entrada vai para a barra', (
+      tester,
+    ) async {
+      final backend = FakeCallables(
+        (name, payload) => throw const CallableException('permission-denied'),
+      );
+      await openConsole(
+        tester,
+        backend: backend,
+        queue: closed(publicQueueJson(barbers: [], nowServing: [])),
+      );
+
+      await tester.tap(find.text('Reabrir entrada'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(ShopConsoleActionBar),
+          matching: find.text('Você não tem permissão para fazer isso.'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('remoção sem rede diz o que ficou sem fazer, e o aviso pode ser dispensado', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      final backend = FakeCallables((name, payload) => throw const CallableException('internal'));
+      await openConsole(
+        tester,
+        backend: backend,
+        queue: publicQueueJson(barbers: [], nowServing: []),
+      );
+
+      await tapRemoveLucas(tester);
+      await tester.tap(find.text('Remover'));
+      await tester.pumpAndSettle();
+
+      const message =
+          'Não deu para confirmar a remoção. Algo deu errado. Tente de novo em instantes.';
+      expect(find.text(message), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text(message)).getSemanticsData().flagsCollection.isLiveRegion,
+        isTrue,
+      );
+
+      await tester.tap(find.byTooltip('Dispensar aviso'));
+      await tester.pump();
+
+      expect(find.text(message), findsNothing);
+      semantics.dispose();
+    });
+
+    testWidgets('fora do expediente, a remoção recusada fica à vista com a lista rolada', (
+      tester,
+    ) async {
+      final backend = FakeCallables(
+        (name, payload) => throw FakeCallables.domainError('invalid-ticket-state'),
+      );
+      await openConsole(
+        tester,
+        backend: backend,
+        queue: publicQueueJson(waiting: 30, barbers: [], nowServing: []),
+      );
+
+      final remove = find.byTooltip('Remover nº 31 · João da fila');
+      await tester.scrollUntilVisible(remove, 300, scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remover'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fora do expediente'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ShopConsoleActionBar),
+          matching: find.text('Nº 31 · João não está mais esperando.'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('fora do expediente também dá para fechar a entrada', (tester) async {
@@ -874,10 +965,7 @@ void main() {
   });
 
   testWidgets('enquanto a fila não chega, mostra que está carregando', (tester) async {
-    final docs = FakeDocuments({
-      _shop: shopJson(),
-      _staff: {'shopId': 'barbearia-do-ze', 'role': 'owner'},
-    });
+    final docs = consoleDocuments();
     final auth = FakeAuthRepository(signedInAs: barberZe);
     final never = StreamController<JsonMap?>();
     addTearDown(docs.dispose);
@@ -940,11 +1028,7 @@ void main() {
   testWidgets('celular estreito com letra em dobro: nada estoura nas três situações', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 740);
-    tester.view.devicePixelRatio = 1;
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.view.reset);
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    useLargeText(tester, size: const Size(360, 740));
 
     final (:docs, backend: _) = await openConsole(tester);
     expect(find.text('Fora do expediente'), findsOneWidget);
